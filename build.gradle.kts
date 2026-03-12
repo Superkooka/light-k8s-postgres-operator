@@ -86,14 +86,13 @@ tasks.register("syncHelmVersion") {
         chartFile.writeText(
             chartFile
                 .readText()
-                .replace(Regex("version: .+"), "version: $version")
-                .replace(Regex("appVersion: .+"), "appVersion: \"$version\""),
+                .replace(Regex("appVersion: .+# managed-by-gradle"), "appVersion: \"$version\"  # managed-by-gradle"),
         )
         val valuesFile = file("charts/values.yaml")
         valuesFile.writeText(
             valuesFile
                 .readText()
-                .replace(Regex("tag: .+"), "tag: \"$version\""),
+                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$version\"  # managed-by-gradle"),
         )
     }
 }

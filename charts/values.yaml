@@ -1,7 +1,7 @@
 operator:
   image:
     repository: my-operator
-    tag: "1.0.0"
+    tag: "1.0.0"  # managed-by-gradle
     pullPolicy: IfNotPresent
   # healthPort: 8080
   # metricsPort: 8081
@@ -21,7 +21,7 @@ postgres:
   enabled: false
   image:
     repository: postgres
-    tag: "1.0.0"
+    tag: 18
     pullPolicy: IfNotPresent
   serviceName: postgres
   secretName: postgres-admin-credentials

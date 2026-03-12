@@ -3,4 +3,4 @@ name: my-operator
 description: Kubernetes operator for managing PostgreSQL databases
 type: application
 version: 1.0.0
-appVersion: "1.0.0"
+appVersion: "1.0.0"  # managed-by-gradle
