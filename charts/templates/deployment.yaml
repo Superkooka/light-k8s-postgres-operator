@@ -1,26 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-operator
+  name: {{ .Chart.Name }}
   namespace: {{ .Values.operator.namespace }}
   labels:
-    app: my-operator
+    app: {{ .Chart.Name }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: my-operator
+      app: {{ .Chart.Name }}
   template:
     metadata:
       labels:
-        app: my-operator
+        app: {{ .Chart.Name }}
     spec:
       serviceAccountName: {{ .Values.operator.serviceAccount.name }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
       containers:
-        - name: operator
+        - name: {{ .Chart.Name }}
           image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
           imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
           env:

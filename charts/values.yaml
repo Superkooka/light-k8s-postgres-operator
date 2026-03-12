@@ -1,7 +1,7 @@
 operator:
   image:
-    repository: my-operator
-    tag: "1.0.0"  # managed-by-gradle
+    repository: light-k8s-postgres-operator
+    tag: "early-dev"  # managed-by-gradle
     pullPolicy: IfNotPresent
   # healthPort: 8080
   # metricsPort: 8081

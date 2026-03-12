@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "com.superkooka"
-version = "1.0.0"
+version = "early-dev"
 
 java {
     toolchain {
@@ -72,25 +72,42 @@ tasks.register<Test>("e2eTest") {
     }
 }
 
+val chartsDirectory = project.findProperty("chartsDirectory") as String? ?: "charts/"
+
 tasks.register<Copy>("syncCrds") {
     group = "helm"
-    from(fileTree("build/tmp/kapt3/classes/main/META-INF/fabric8") { include("*.yml") })
-    into("charts/templates/crds")
+    println("chartsDirectory = $chartsDirectory")
+
+    from(
+        fileTree("build/tmp/kapt3/classes/main/META-INF/fabric8") {
+            include("*.yml")
+            exclude("*v1beta1*")
+        },
+    )
+    into(chartsDirectory + "templates/crds")
     dependsOn("kaptKotlin")
 }
 
 tasks.register("syncHelmVersion") {
     group = "helm"
+    println("chartsDirectory = $chartsDirectory")
+
     doLast {
-        val chartFile = file("charts/Chart.yaml")
+        val chartFile = file(chartsDirectory + "Chart.yaml")
         chartFile.writeText(
             chartFile
                 .readText()
                 .replace(Regex("appVersion: .+# managed-by-gradle"), "appVersion: \"$version\"  # managed-by-gradle"),
         )
-        val valuesFile = file("charts/values.yaml")
+        val valuesFile = file(chartsDirectory + "values.yaml")
         valuesFile.writeText(
             valuesFile
+                .readText()
+                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$version\"  # managed-by-gradle"),
+        )
+        val valuesLocalFile = file(chartsDirectory + "values.local.yaml")
+        valuesLocalFile.writeText(
+            valuesLocalFile
                 .readText()
                 .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$version\"  # managed-by-gradle"),
         )
@@ -102,7 +119,7 @@ jib {
         image = "eclipse-temurin:21-jre-alpine"
     }
     to {
-        image = "my-operator"
+        image = "light-k8s-postgres-operator"
         tags = setOf(project.version.toString())
     }
     container {

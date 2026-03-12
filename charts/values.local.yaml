@@ -1,6 +1,6 @@
 operator:
   image:
-    tag: "1.0.0"
+    tag: "early-dev"  # managed-by-gradle
     pullPolicy: Never
   leaderElection: false
 

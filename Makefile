@@ -1,10 +1,12 @@
 VERSION   := $(shell grep '^version' build.gradle.kts | head -1 | sed 's/.*"\(.*\)"/\1/')
-IMAGE     := k8s-postgres-operator
-CLUSTER   := dev
+IMAGE     := light-k8s-postgres-operator
+CLUSTER   := light-k8s-postgres-operator-dev
 CONTEXT   := k3d-$(CLUSTER)
 NAMESPACE := default
 KUBECTL   := kubectl --context=$(CONTEXT)
 HELM      := helm --kube-context=$(CONTEXT)
+CHART_NAME := light-k8s-postgres-operator
+GRADLEW_EXTRA_ARGUMENTS := -PchartsDirectory=charts-local/
 
 .DEFAULT_GOAL := run
 
@@ -19,32 +21,41 @@ check-dependencies:
 	@java -version 2>&1 | grep -q "21\|22\|23\|24\|25" || echo "warning: java 21+ recommended"
 	@echo "Dependencies OK"
 
+.PHONY: init
+init:
+	@if [ ! -d charts-local/ ]; then \
+		cp -r charts/ charts-local/; \
+		echo "charts/ copied to charts-local/"; \
+	fi
+	
 .PHONY: run
-run: check-dependencies cluster-up build sync deploy logs
+run: check-dependencies cluster-up build syncHelmVersion syncCrds deploy logs
 
 .PHONY: stop
 stop: cluster-down
 
 .PHONY: build
 build:
-	@echo "Building..."
-	@./gradlew build -q
-	@echo "Build OK"
+	./gradlew build $(GRADLEW_EXTRA_ARGUMENTS)
 
 .PHONY: test
 test:
-	./gradlew cleanTest test
+	./gradlew cleanTest test $(GRADLEW_EXTRA_ARGUMENTS)
 
 .PHONY: image
 image:
-	@echo "Building Docker image $(IMAGE):$(VERSION)..."
-	@./gradlew jibDockerBuild -q
-	@echo "Image OK"
+	./gradlew jibDockerBuild $(GRADLEW_EXTRA_ARGUMENTS)
 
-.PHONY: sync
-sync:
-	@echo "Syncing CRDs and Helm chart version..."
-	@./gradlew syncHelmVersion -q
+.PHONY: syncHelmVersion
+syncHelmVersion:
+	@echo "Syncing Helm chart version..."
+	./gradlew syncHelmVersion $(GRADLEW_EXTRA_ARGUMENTS)
+	@echo "Sync OK"
+
+.PHONY: syncCrds
+syncCrds:
+	@echo "Syncing CRDs..."
+	./gradlew syncCrds $(GRADLEW_EXTRA_ARGUMENTS)
 	@echo "Sync OK"
 
 .PHONY: cluster-up
@@ -77,36 +88,35 @@ _check-context:
 .PHONY: deploy
 deploy: image _check-context
 	@echo "Importing image into k3d..."
-	@k3d image import $(IMAGE):$(VERSION) --cluster $(CLUSTER)
+	k3d image import $(IMAGE):$(VERSION) --cluster $(CLUSTER)
 	@echo "Deploying via Helm..."
 	@EXTRA_VALUES=""; \
-	if [ -f values.local.yaml ]; then EXTRA_VALUES="--values values.local.yaml"; fi; \
-	@$(HELM) upgrade --install my-operator charts/my-operator/ \
+	$(HELM) upgrade --install $(CHART_NAME) charts-local/ \
 		--namespace $(NAMESPACE) \
-		--values charts/my-operator/values.yaml \
-		$$EXTRA_VALUES \
+		--values charts-local/values.yaml \
+		--values charts-local/values.local.yaml \
 		--wait --timeout 2m
 	@echo "Deploy OK"
 
 .PHONY: undeploy
 undeploy:
 	@echo "Uninstalling Helm release..."
-	@$(HELM) uninstall my-operator --namespace $(NAMESPACE) 2>/dev/null || true
+	@$(HELM) uninstall $(CHART_NAME) --namespace $(NAMESPACE) 2>/dev/null || true
 
 .PHONY: logs
 logs:
-	$(KUBECTL) logs -n $(NAMESPACE) -l app=my-operator -f
+	$(KUBECTL) logs -n $(NAMESPACE) -l app=$(CHART_NAME) -f
 
 .PHONY: status
 status:
-	@$(KUBECTL) get pods -n $(NAMESPACE) -l app=my-operator
+	@$(KUBECTL) get pods -n $(NAMESPACE) -l app=$(CHART_NAME)
 	@echo ""
 	@$(HELM) list -n $(NAMESPACE)
 
 .PHONY: cs
 cs:
-	./gradlew ktlintCheck
+	./gradlew ktlintCheck $(GRADLEW_EXTRA_ARGUMENTS)
 
 .PHONY: cs-fix
 cs-fix:
-	./gradlew ktlintFormat
+	./gradlew ktlintFormat $(GRADLEW_EXTRA_ARGUMENTS)

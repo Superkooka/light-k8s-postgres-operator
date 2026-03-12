@@ -1,6 +1,6 @@
 apiVersion: v2
-name: my-operator
+name: light-k8s-postgres-operator
 description: Kubernetes operator for managing PostgreSQL databases
 type: application
 version: 1.0.0
-appVersion: "1.0.0"  # managed-by-gradle
+appVersion: "early-dev"  # managed-by-gradle
