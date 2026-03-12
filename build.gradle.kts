@@ -72,25 +72,6 @@ tasks.register<Test>("e2eTest") {
     }
 }
 
-tasks.register("syncHelmVersion") {
-    group = "helm"
-    doLast {
-        val chartFile = file("charts/my-operator/Chart.yaml")
-        chartFile.writeText(
-            chartFile
-                .readText()
-                .replace(Regex("version: .+"), "version: $version")
-                .replace(Regex("appVersion: .+"), "appVersion: \"$version\""),
-        )
-        val valuesFile = file("charts/my-operator/values.yaml")
-        valuesFile.writeText(
-            valuesFile
-                .readText()
-                .replace(Regex("tag: .+"), "tag: \"$version\""),
-        )
-    }
-}
-
 tasks.register<Copy>("syncCrds") {
     group = "helm"
     from(fileTree("build/tmp/kapt3/classes/main/META-INF/fabric8") { include("*.yml") })
@@ -98,8 +79,23 @@ tasks.register<Copy>("syncCrds") {
     dependsOn("kaptKotlin")
 }
 
-tasks.named("syncHelmVersion") {
-    dependsOn("syncCrds")
+tasks.register("syncHelmVersion") {
+    group = "helm"
+    doLast {
+        val chartFile = file("charts/Chart.yaml")
+        chartFile.writeText(
+            chartFile
+                .readText()
+                .replace(Regex("version: .+"), "version: $version")
+                .replace(Regex("appVersion: .+"), "appVersion: \"$version\""),
+        )
+        val valuesFile = file("charts/values.yaml")
+        valuesFile.writeText(
+            valuesFile
+                .readText()
+                .replace(Regex("tag: .+"), "tag: \"$version\""),
+        )
+    }
 }
 
 jib {
