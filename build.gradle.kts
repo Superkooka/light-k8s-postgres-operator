@@ -1,11 +1,12 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget  
 
 plugins {
     kotlin("jvm") version "2.3.10"
     kotlin("kapt") version "2.3.10"
     application
     id("com.google.cloud.tools.jib") version "3.5.2"
+    id("org.jlleitschuh.gradle.ktlint") version "14.1.0"
 }
 
 group = "com.superkooka"
@@ -27,10 +28,10 @@ dependencies {
     // java-operator-sdk core
     implementation(platform("io.javaoperatorsdk:operator-framework-bom:$josdkVersion"))
     implementation("io.javaoperatorsdk:operator-framework")
-    kapt("io.javaoperatorsdk:operator-framework:$josdkVersion") 
+    kapt("io.javaoperatorsdk:operator-framework:$josdkVersion")
 
     // postgresql-connector
-    implementation("org.postgresql:postgresql:42.7.9") 
+    implementation("org.postgresql:postgresql:42.7.9")
 
     // loging
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
@@ -41,7 +42,15 @@ dependencies {
     testImplementation("io.javaoperatorsdk:operator-framework-junit-5")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("org.awaitility:awaitility-kotlin")
+    testImplementation("org.awaitility:awaitility-kotlin:4.3.0")
+}
+
+application {
+    mainClass.set("com.superkooka.operator.postgres.Main")
+}
+
+ktlint {
+    verbose.set(true)
 }
 
 tasks.withType<KotlinCompile> {
@@ -63,45 +72,21 @@ tasks.register<Test>("e2eTest") {
     }
 }
 
-application {
-    mainClass.set("com.superkooka.operator.postgres.Main")
-}
-
-jib {
-    from {
-        image = "eclipse-temurin:21-jre-alpine"
-    }
-    to {
-        image = "my-operator"
-        tags = setOf(project.version.toString())
-    }
-    container {
-        jvmFlags = listOf(
-            "-XX:+UseContainerSupport",
-            "-XX:MaxRAMPercentage=75.0",
-            "-XX:+ExitOnOutOfMemoryError",
-        )
-        user = "1000"
-    }
-}
-
-tasks.named("jib") {
-    enabled = false
-}
-
 tasks.register("syncHelmVersion") {
     group = "helm"
     doLast {
         val chartFile = file("charts/my-operator/Chart.yaml")
         chartFile.writeText(
-            chartFile.readText()
+            chartFile
+                .readText()
                 .replace(Regex("version: .+"), "version: $version")
-                .replace(Regex("appVersion: .+"), "appVersion: \"$version\"")
+                .replace(Regex("appVersion: .+"), "appVersion: \"$version\""),
         )
         val valuesFile = file("charts/my-operator/values.yaml")
         valuesFile.writeText(
-            valuesFile.readText()
-                .replace(Regex("tag: .+"), "tag: \"$version\"")
+            valuesFile
+                .readText()
+                .replace(Regex("tag: .+"), "tag: \"$version\""),
         )
     }
 }
@@ -115,4 +100,27 @@ tasks.register<Copy>("syncCrds") {
 
 tasks.named("syncHelmVersion") {
     dependsOn("syncCrds")
+}
+
+jib {
+    from {
+        image = "eclipse-temurin:21-jre-alpine"
+    }
+    to {
+        image = "my-operator"
+        tags = setOf(project.version.toString())
+    }
+    container {
+        jvmFlags =
+            listOf(
+                "-XX:+UseContainerSupport",
+                "-XX:MaxRAMPercentage=75.0",
+                "-XX:+ExitOnOutOfMemoryError",
+            )
+        user = "1000"
+    }
+}
+
+tasks.named("jib") {
+    enabled = false
 }

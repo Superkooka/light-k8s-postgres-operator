@@ -102,3 +102,11 @@ status:
 	@$(KUBECTL) get pods -n $(NAMESPACE) -l app=my-operator
 	@echo ""
 	@$(HELM) list -n $(NAMESPACE)
+
+.PHONY: cs
+cs:
+	./gradlew ktlintCheck
+
+.PHONY: cs-fix
+cs-fix:
+	./gradlew ktlintFormat
