@@ -28,7 +28,7 @@ dependencies {
     // java-operator-sdk core
     implementation(platform("io.javaoperatorsdk:operator-framework-bom:$josdkVersion"))
     implementation("io.javaoperatorsdk:operator-framework")
-    kapt("io.javaoperatorsdk:operator-framework:$josdkVersion")
+    kapt("io.fabric8:crd-generator-apt:7.6.1")
 
     // postgresql-connector
     implementation("org.postgresql:postgresql:42.7.9")
@@ -94,7 +94,7 @@ tasks.register("syncHelmVersion") {
 tasks.register<Copy>("syncCrds") {
     group = "helm"
     from(fileTree("build/tmp/kapt3/classes/main/META-INF/fabric8") { include("*.yml") })
-    into("charts/my-operator/templates/crds")
+    into("charts/templates/crds")
     dependsOn("kaptKotlin")
 }
 

@@ -1,0 +1,12 @@
+apiVersion: superkooka.com/v1
+kind: DatabaseClaim
+metadata:
+  name: my-app-db
+  namespace: default
+spec:
+  postgresRef:
+    name: postgres
+  credentialsRef:
+    name: postgres-admin-credentials
+  database: my_app_db
+  owner: my_app_user

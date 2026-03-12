@@ -1,0 +1,102 @@
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.postgres.secretName }}
+  namespace: {{ .Values.operator.namespace }}
+type: Opaque
+stringData:
+  username: {{ .Values.postgres.credentials.username }}
+  password: {{ .Values.postgres.credentials.password }}
+  database: {{ .Values.postgres.credentials.database }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.postgres.serviceName }}
+  namespace: {{ .Values.operator.namespace }}
+  labels:
+    app: {{ .Values.postgres.serviceName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.postgres.serviceName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.postgres.serviceName }}
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.secretName }}
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.secretName }}
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.secretName }}
+                  key: database
+          ports:
+            - containerPort: 5432
+              name: postgres
+          {{- if eq .Values.postgres.storage.type "pvc" }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          {{- end }}
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+      {{- if eq .Values.postgres.storage.type "pvc" }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.postgres.serviceName }}-pvc
+      {{- else }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+---
+# Service exposant le PostgreSQL
+# → référencé dans DatabaseClaim.spec.postgresRef.name
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.postgres.serviceName }}
+  namespace: {{ .Values.operator.namespace }}
+  labels:
+    app: {{ .Values.postgres.serviceName }}
+spec:
+  selector:
+    app: {{ .Values.postgres.serviceName }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- if eq .Values.postgres.storage.type "pvc" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.postgres.serviceName }}-pvc
+  namespace: {{ .Values.operator.namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.postgres.storage.size }}
+{{- end }}
+{{- end }}
