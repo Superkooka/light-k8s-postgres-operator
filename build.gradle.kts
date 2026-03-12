@@ -2,11 +2,11 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "2.3.10"
-    kotlin("kapt") version "2.3.10"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.kapt)
     application
-    id("com.google.cloud.tools.jib") version "3.5.2"
-    id("org.jlleitschuh.gradle.ktlint") version "14.1.0"
+    alias(libs.plugins.jib)
+    alias(libs.plugins.ktlint)
 }
 
 group = "com.superkooka"
@@ -22,27 +22,24 @@ repositories {
     mavenCentral()
 }
 
-val josdkVersion = "5.2.3"
-
 dependencies {
     // java-operator-sdk core
-    implementation(platform("io.javaoperatorsdk:operator-framework-bom:$josdkVersion"))
-    implementation("io.javaoperatorsdk:operator-framework")
-    kapt("io.fabric8:crd-generator-apt:7.6.1")
+    implementation(platform(libs.josdk.bom))
+    implementation(libs.josdk.framework)
+    kapt(libs.fabric8.crd.generator)
 
-    // postgresql-connector
-    implementation("org.postgresql:postgresql:42.7.9")
+    implementation(libs.postgresql)
 
     // loging
-    implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
-    implementation("org.slf4j:slf4j-api:2.0.13")
-    runtimeOnly("ch.qos.logback:logback-classic:1.5.6")
+    implementation(libs.kotlin.logging)
+    implementation(libs.slf4j.api)
+    runtimeOnly(libs.logback.classic)
 
     // Test
-    testImplementation("io.javaoperatorsdk:operator-framework-junit-5")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("org.awaitility:awaitility-kotlin:4.3.0")
+    testImplementation(libs.josdk.junit5)
+    testImplementation(libs.kotlin.test.junit5)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.awaitility.kotlin)
 }
 
 application {
