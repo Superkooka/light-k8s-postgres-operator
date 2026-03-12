@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-operator
+  namespace: {{ .Values.operator.namespace }}
+  labels:
+    app: my-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-operator
+  template:
+    metadata:
+      labels:
+        app: my-operator
+    spec:
+      serviceAccountName: {{ .Values.operator.serviceAccount.name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: operator
+          image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          env:
+            # - name: OPERATOR_HEALTH_PORT
+            #   value: {{ .Values.operator.healthPort | quote }}
+            # - name: OPERATOR_METRICS_PORT
+            #   value: {{ .Values.operator.metricsPort | quote }}
+            # - name: OPERATOR_LEADER_ELECTION
+            #   value: {{ .Values.operator.leaderElection | quote }}
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          # ports:
+          #   - name: health
+          #     containerPort: {{ .Values.operator.healthPort }}
+          #   - name: metrics
+          #     containerPort: {{ .Values.operator.metricsPort }}
+          # livenessProbe:
+          #   httpGet:
+          #     path: /healthz
+          #     port: health
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 20
+          #   failureThreshold: 3
+          # readinessProbe:
+          #   httpGet:
+          #     path: /readyz
+          #     port: health
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 10
+          #   failureThreshold: 3
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
