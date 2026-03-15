@@ -1,12 +1,16 @@
 package com.superkooka.operator.postgres
 
+import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
+import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.javaoperatorsdk.operator.api.reconciler.Context
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl
+import java.security.SecureRandom
 import java.sql.DriverManager
+import java.sql.SQLException
 import java.util.Base64
 
 private val logger = KotlinLogging.logger {}
@@ -79,12 +83,55 @@ class DatabaseClaimReconciler(
                 message = "Database $name is ready"
             }
 
-        // createRole()
+        val random = SecureRandom()
+        val rolePassword =
+            Base64
+                .getEncoder()
+                .withoutPadding()
+                .encodeToString(
+                    random
+                        .generateSeed(32),
+                )
+        createRole(host, port, username, password, spec.database, spec.owner, rolePassword)
 
-        // resource.status = DatabaseClaimStatus().apply {
-        //     phase = "Ready"
-        //     message = "Role for $databaseName is ready"
-        // }
+        val roleSecret =
+            SecretBuilder()
+                .withNewMetadata()
+                .withName("$name-credentials")
+                .withNamespace(namespace)
+                .addToLabels("app.kubernetes.io/managed-by", "postgres-operator")
+                .addToLabels("app.kubernetes.io/name", "postgres-credentials")
+                .addToLabels("superkooka.com/database-claim", name)
+                .addToAnnotations("superkooka.com/owner-role", spec.owner)
+                .addToAnnotations("superkooka.com/database", spec.database)
+                .withOwnerReferences(
+                    OwnerReferenceBuilder()
+                        .withApiVersion(resource.apiVersion)
+                        .withKind(resource.kind)
+                        .withName(name)
+                        .withUid(resource.metadata.uid)
+                        .withBlockOwnerDeletion(true)
+                        .withController(true)
+                        .build(),
+                ).endMetadata()
+                .addToData("username", Base64.getEncoder().encodeToString(spec.owner.toByteArray()))
+                .addToData("password", Base64.getEncoder().encodeToString(rolePassword.toByteArray()))
+                .addToData("host", Base64.getEncoder().encodeToString(host.toByteArray()))
+                .addToData("port", Base64.getEncoder().encodeToString(port.toString().toByteArray()))
+                .addToData("database", Base64.getEncoder().encodeToString(spec.database.toByteArray()))
+                .build()
+
+        client
+            .secrets()
+            .inNamespace(namespace)
+            .resource(roleSecret)
+            .serverSideApply()
+
+        resource.status =
+            DatabaseClaimStatus().apply {
+                phase = "Ready"
+                message = "Role for $name is ready"
+            }
 
         logger.info { "DatabaseClaim '$name' reconciled successfully" }
 
@@ -116,5 +163,68 @@ class DatabaseClaimReconciler(
                 conn.createStatement().execute("""CREATE DATABASE "$dbName"""")
             }
         }
+    }
+
+    fun createRole(
+        host: String,
+        port: Int,
+        adminUser: String,
+        adminPassword: String,
+        dbName: String,
+        roleName: String,
+        rolePassword: String,
+    ) {
+        val maintenanceUrl = "jdbc:postgresql://$host:$port/postgres"
+        DriverManager.getConnection(maintenanceUrl, adminUser, adminPassword).use { conn ->
+            conn.autoCommit = true
+
+            val roleExists =
+                conn
+                    .prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?")
+                    .use { stmt ->
+                        stmt.setString(1, roleName)
+                        stmt.executeQuery().next()
+                    }
+
+            if (!roleExists) {
+                conn.createStatement().execute(
+                    """CREATE ROLE "$roleName" WITH LOGIN PASSWORD ${conn.escapeString(rolePassword)}""",
+                )
+                logger.info { "Role '$roleName' created" }
+            } else {
+                logger.info { "Role '$roleName' already exists, skipping creation" }
+            }
+        }
+
+        val dbUrl = "jdbc:postgresql://$host:$port/$dbName"
+        DriverManager.getConnection(dbUrl, adminUser, adminPassword).use { conn ->
+            conn.autoCommit = true
+
+            require(dbName.matches(Regex("^[a-zA-Z0-9_]{1,63}$"))) { "Invalid dbName: $dbName" }
+            require(roleName.matches(Regex("^[a-zA-Z0-9_]{1,63}$"))) { "Invalid roleName: $roleName" }
+
+            val grants =
+                listOf(
+                    """GRANT USAGE ON SCHEMA public TO "$roleName"""",
+                    """GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$roleName"""", // SHOULD BE CONFIGURABLE
+                    """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$roleName"""",
+                    """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$roleName"""",
+                    """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "$roleName"""",
+                )
+
+            try {
+                grants.forEach { sql -> conn.createStatement().execute(sql) }
+            } catch (e: SQLException) {
+                logger.error { "Failed to grant privileges on '$dbName' to '$roleName': ${e.message}" }
+                throw e
+            }
+
+            logger.info { "Privileges on '$dbName' granted to '$roleName'" }
+        }
+    }
+
+    private fun java.sql.Connection.escapeString(value: String): String {
+        val escaped = value.replace("'", "''")
+        return "'$escaped'"
     }
 }

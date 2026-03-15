@@ -1,0 +1,13 @@
+- [x] Create role
+- [x] Create a Secret with postgres password
+- [ ] Github Action CI
+- [ ] Renovate
+- [ ] Architecture
+- [ ] Add unit/e2e tests
+- [ ] Add documentation
+- [ ] Split DatabaseClaim responsibility into PostgresRole/Claim CRD
+- [ ] Explicit reconciliation strategy
+- [ ] Add Customisation on role/claim
+- [ ] Release V1
+- [ ] Internal Metrics
+- [ ] Backup
