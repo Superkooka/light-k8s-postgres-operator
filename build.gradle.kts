@@ -73,7 +73,8 @@ val chartsDirectory = project.findProperty("chartsDirectory") as String? ?: "cha
 
 tasks.register<Copy>("syncCrds") {
     group = "helm"
-    println("chartsDirectory = $chartsDirectory")
+
+    val chartDir = chartsDirectory
 
     from(
         fileTree("build/tmp/kapt3/classes/main/META-INF/fabric8") {
@@ -81,34 +82,40 @@ tasks.register<Copy>("syncCrds") {
             exclude("*v1beta1*")
         },
     )
-    into(chartsDirectory + "templates/crds")
+    into("$chartDir/crds")
     dependsOn("kaptKotlin")
 }
 
 tasks.register("syncHelmVersion") {
     group = "helm"
-    println("chartsDirectory = $chartsDirectory")
+
+    val chartDir = chartsDirectory
+    val appVersion = version.toString()
 
     doLast {
-        val chartFile = file(chartsDirectory + "Chart.yaml")
+        val chartFile = File("$chartDir/Chart.yaml")
         chartFile.writeText(
             chartFile
                 .readText()
-                .replace(Regex("appVersion: .+# managed-by-gradle"), "appVersion: \"$version\"  # managed-by-gradle"),
+                .replace(Regex("appVersion: .+# managed-by-gradle"), "appVersion: \"$appVersion\"  # managed-by-gradle"),
         )
-        val valuesFile = file(chartsDirectory + "values.yaml")
+        val valuesFile = File("$chartDir/values.yaml")
         valuesFile.writeText(
             valuesFile
                 .readText()
-                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$version\"  # managed-by-gradle"),
+                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$appVersion\"  # managed-by-gradle"),
         )
-        val valuesLocalFile = file(chartsDirectory + "values.local.yaml")
+        val valuesLocalFile = File("$chartDir/values.local.yaml")
         valuesLocalFile.writeText(
             valuesLocalFile
                 .readText()
-                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$version\"  # managed-by-gradle"),
+                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$appVersion\"  # managed-by-gradle"),
         )
     }
+}
+
+tasks.named("jibDockerBuild") {
+    notCompatibleWithConfigurationCache("Jib plugin is not compatible with configuration cache")
 }
 
 jib {
