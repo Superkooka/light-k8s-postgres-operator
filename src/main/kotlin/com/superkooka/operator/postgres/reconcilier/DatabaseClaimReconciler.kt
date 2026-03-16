@@ -7,19 +7,14 @@ import com.superkooka.operator.postgres.postgres.PostgresAdminCredentials
 import com.superkooka.operator.postgres.postgres.PostgresConnectionFactory
 import com.superkooka.operator.postgres.postgres.ProvisioningException
 import com.superkooka.operator.postgres.postgres.RoleProvisioner
-import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.javaoperatorsdk.operator.api.reconciler.Context
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration
-import io.javaoperatorsdk.operator.api.reconciler.Reconciler
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl
 import java.security.SecureRandom
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Base64
 
 private val logger = KotlinLogging.logger {}
@@ -27,7 +22,7 @@ private val logger = KotlinLogging.logger {}
 @ControllerConfiguration
 class DatabaseClaimReconciler(
     private val client: KubernetesClient,
-) : Reconciler<DatabaseClaim> {
+) : AbstractReconciler<DatabaseClaim>() {
     override fun reconcile(
         resource: DatabaseClaim,
         context: Context<DatabaseClaim>,
@@ -65,7 +60,7 @@ class DatabaseClaimReconciler(
             }
 
         val host = "${service.metadata.name}.${service.metadata.namespace}.svc.cluster.local"
-        val port = //TODO FIX ME: Can crash if no port?
+        val port = // TODO FIX ME: Can crash if no port?
             service.spec.ports
                 .first()
                 .port
@@ -100,12 +95,18 @@ class DatabaseClaimReconciler(
         // Not handled: Secret missing  + existing role
 
         val secretName = "$name-credentials"
-        val existingSecret = client.secrets().inNamespace(namespace).withName(secretName).get()
-        val rolePassword = if (existingSecret != null) {
-            String(Base64.getDecoder().decode(existingSecret.data["password"]))
-        } else {
-            Base64.getEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
-        }
+        val existingSecret =
+            client
+                .secrets()
+                .inNamespace(namespace)
+                .withName(secretName)
+                .get()
+        val rolePassword =
+            if (existingSecret != null) {
+                String(Base64.getDecoder().decode(existingSecret.data["password"]))
+            } else {
+                Base64.getEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
+            }
 
         val roleProvisioner = RoleProvisioner(postgresAdminDatabaseFactory)
         roleProvisioner.ensureRole(spec.owner, rolePassword, spec.database)
@@ -150,44 +151,6 @@ class DatabaseClaimReconciler(
 
         logger.info { "DatabaseClaim '$name' reconciled successfully" }
 
-        return UpdateControl.patchStatus(resource)
-    }
-
-    // TODO: Move to an abstraction
-    private fun updateCondition(
-        resource: DatabaseClaim,
-        type: String,
-        status: String,
-        reason: String,
-        message: String,
-    ) {
-        val conditions = resource.status.conditions
-        val existing = conditions.find { it.type == type }
-
-        if (existing == null || existing.status != status || existing.reason != reason || existing.message != message) {
-            val now = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
-            val newCondition =
-                Condition().apply {
-                    this.type = type
-                    this.status = status
-                    this.reason = reason
-                    this.message = message
-                    this.lastTransitionTime = now
-                }
-            conditions.removeIf { it.type == type }
-            conditions.add(newCondition)
-        }
-    }
-
-    // TODO: Move to an abstraction
-    private fun failWith(
-        resource: DatabaseClaim,
-        reason: String,
-        message: String,
-    ): UpdateControl<DatabaseClaim> {
-        resource.status.phase = "Failed"
-        resource.status.message = message
-        updateCondition(resource, "Ready", "False", reason, message)
         return UpdateControl.patchStatus(resource)
     }
 }
