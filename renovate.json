@@ -1,0 +1,64 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "schedule": ["at any time"],
+  "timezone": "Europe/Paris",
+  "labels": ["dependencies"],
+  "assignees": [],
+  "reviewers": [],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate Dashboard",
+  "packageRules": [
+    {
+      "description": "Group all Kotlin-related updates together",
+      "matchPackagePrefixes": ["org.jetbrains.kotlin"],
+      "groupName": "Kotlin",
+      "automerge": false
+    },
+    {
+      "description": "Group all JOSDK updates together",
+      "matchPackagePrefixes": ["io.javaoperatorsdk"],
+      "groupName": "Java Operator SDK"
+    },
+    {
+      "description": "Group all Fabric8 updates together",
+      "matchPackagePrefixes": ["io.fabric8"],
+      "groupName": "Fabric8"
+    },
+    {
+      "description": "Require manual review for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major-update"]
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Group Gradle wrapper updates",
+      "matchManagers": ["gradle-wrapper"],
+      "groupName": "Gradle Wrapper",
+      "automerge": false
+    },
+    {
+      "description": "Group Jib base image updates (eclipse-temurin)",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["eclipse-temurin"],
+      "groupName": "JRE Base Image",
+      "automerge": false
+    }
+  ],
+  "gradle": {
+    "enabled": true
+  },
+  "docker": {
+    "enabled": true
+  }
+}
