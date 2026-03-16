@@ -1,5 +1,12 @@
-package com.superkooka.operator.postgres
+package com.superkooka.operator.postgres.reconcilier
 
+import com.superkooka.operator.postgres.api.DatabaseClaim
+import com.superkooka.operator.postgres.api.DatabaseClaimStatus
+import com.superkooka.operator.postgres.postgres.DatabaseProvisioner
+import com.superkooka.operator.postgres.postgres.PostgresAdminCredentials
+import com.superkooka.operator.postgres.postgres.PostgresConnectionFactory
+import com.superkooka.operator.postgres.postgres.ProvisioningException
+import com.superkooka.operator.postgres.postgres.RoleProvisioner
 import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
@@ -10,8 +17,6 @@ import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl
 import java.security.SecureRandom
-import java.sql.DriverManager
-import java.sql.SQLException
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -36,10 +41,7 @@ class DatabaseClaimReconciler(
         val spec =
             resource.spec ?: run {
                 logger.error { "DatabaseClaim '$name' has no spec" }
-                status.phase = "Failed"
-                status.message = "Missing spec"
-                updateCondition(resource, "Ready", "False", "MissingSpec", "DatabaseClaim has no spec")
-                return UpdateControl.patchStatus(resource)
+                return failWith(resource, "MissingSpec", "DatabaseClaim has no spec")
             }
 
         val service =
@@ -49,10 +51,7 @@ class DatabaseClaimReconciler(
                 .withName(spec.postgresRef.name)
                 .get() ?: run {
                 logger.error { "Service '${spec.postgresRef.name}' not found" }
-                status.phase = "Failed"
-                status.message = "Service '${spec.postgresRef.name}' not found"
-                updateCondition(resource, "Ready", "False", "ServiceNotFound", "Service '${spec.postgresRef.name}' not found")
-                return UpdateControl.patchStatus(resource)
+                return failWith(resource, "ServiceNotFound", "Service '${spec.postgresRef.name}' not found")
             }
 
         val secret =
@@ -62,14 +61,11 @@ class DatabaseClaimReconciler(
                 .withName(spec.credentialsRef.name)
                 .get() ?: run {
                 logger.error { "Secret '${spec.credentialsRef.name}' not found" }
-                status.phase = "Failed"
-                status.message = "Secret '${spec.credentialsRef.name}' not found"
-                updateCondition(resource, "Ready", "False", "SecretNotFound", "Secret '${spec.credentialsRef.name}' not found")
-                return UpdateControl.patchStatus(resource)
+                return failWith(resource, "SecretNotFound", "Secret '${spec.credentialsRef.name}' not found")
             }
 
         val host = "${service.metadata.name}.${service.metadata.namespace}.svc.cluster.local"
-        val port =
+        val port = //TODO FIX ME: Can crash if no port?
             service.spec.ports
                 .first()
                 .port
@@ -78,21 +74,41 @@ class DatabaseClaimReconciler(
 
         logger.info { "Reconciling DatabaseClaim '$name' in '$namespace'" }
 
-        createDatabase(host, port, username, password, spec.database)
+        val postgresAdminDatabaseFactory =
+            PostgresConnectionFactory(
+                PostgresAdminCredentials(
+                    host,
+                    port,
+                    username,
+                    password,
+                ),
+            )
+
+        val databaseProvisioner = DatabaseProvisioner(postgresAdminDatabaseFactory)
+        try {
+            databaseProvisioner.ensureDatabase(spec.database)
+        } catch (e: ProvisioningException) {
+            logger.error { e.message }
+            return failWith(resource, e.error.name, e.message)
+        }
+
         status.phase = "Running"
         status.message = "Database $name is ready"
         updateCondition(resource, "DatabaseReady", "True", "Success", "Database created successfully")
 
-        val random = SecureRandom()
-        val rolePassword =
-            Base64
-                .getEncoder()
-                .withoutPadding()
-                .encodeToString(
-                    random
-                        .generateSeed(32),
-                )
-        createRole(host, port, username, password, spec.database, spec.owner, rolePassword)
+        // TODO: Explicit strategy for password
+        // Not handled: Secret missing  + existing role
+
+        val secretName = "$name-credentials"
+        val existingSecret = client.secrets().inNamespace(namespace).withName(secretName).get()
+        val rolePassword = if (existingSecret != null) {
+            String(Base64.getDecoder().decode(existingSecret.data["password"]))
+        } else {
+            Base64.getEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
+        }
+
+        val roleProvisioner = RoleProvisioner(postgresAdminDatabaseFactory)
+        roleProvisioner.ensureRole(spec.owner, rolePassword, spec.database)
 
         val roleSecret =
             SecretBuilder()
@@ -137,96 +153,7 @@ class DatabaseClaimReconciler(
         return UpdateControl.patchStatus(resource)
     }
 
-    fun createDatabase(
-        host: String,
-        port: Int,
-        adminUser: String,
-        adminPassword: String,
-        dbName: String,
-    ) {
-        val url = "jdbc:postgresql://$host:$port/postgres"
-
-        DriverManager.getConnection(url, adminUser, adminPassword).use { conn ->
-            conn.autoCommit = true
-
-            val exists =
-                conn
-                    .prepareStatement(
-                        "SELECT 1 FROM pg_database WHERE datname = ?",
-                    ).use { stmt ->
-                        stmt.setString(1, dbName)
-                        stmt.executeQuery().next()
-                    }
-
-            if (!exists) {
-                conn.createStatement().execute("""CREATE DATABASE "$dbName"""")
-            }
-        }
-    }
-
-    fun createRole(
-        host: String,
-        port: Int,
-        adminUser: String,
-        adminPassword: String,
-        dbName: String,
-        roleName: String,
-        rolePassword: String,
-    ) {
-        val maintenanceUrl = "jdbc:postgresql://$host:$port/postgres"
-        DriverManager.getConnection(maintenanceUrl, adminUser, adminPassword).use { conn ->
-            conn.autoCommit = true
-
-            val roleExists =
-                conn
-                    .prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?")
-                    .use { stmt ->
-                        stmt.setString(1, roleName)
-                        stmt.executeQuery().next()
-                    }
-
-            if (!roleExists) {
-                conn.createStatement().execute(
-                    """CREATE ROLE "$roleName" WITH LOGIN PASSWORD ${conn.escapeString(rolePassword)}""",
-                )
-                logger.info { "Role '$roleName' created" }
-            } else {
-                logger.info { "Role '$roleName' already exists, skipping creation" }
-            }
-        }
-
-        val dbUrl = "jdbc:postgresql://$host:$port/$dbName"
-        DriverManager.getConnection(dbUrl, adminUser, adminPassword).use { conn ->
-            conn.autoCommit = true
-
-            require(dbName.matches(Regex("^[a-zA-Z0-9_]{1,63}$"))) { "Invalid dbName: $dbName" }
-            require(roleName.matches(Regex("^[a-zA-Z0-9_]{1,63}$"))) { "Invalid roleName: $roleName" }
-
-            val grants =
-                listOf(
-                    """GRANT USAGE ON SCHEMA public TO "$roleName"""",
-                    """GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$roleName"""", // SHOULD BE CONFIGURABLE
-                    """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$roleName"""",
-                    """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$roleName"""",
-                    """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "$roleName"""",
-                )
-
-            try {
-                grants.forEach { sql -> conn.createStatement().execute(sql) }
-            } catch (e: SQLException) {
-                logger.error { "Failed to grant privileges on '$dbName' to '$roleName': ${e.message}" }
-                throw e
-            }
-
-            logger.info { "Privileges on '$dbName' granted to '$roleName'" }
-        }
-    }
-
-    private fun java.sql.Connection.escapeString(value: String): String {
-        val escaped = value.replace("'", "''")
-        return "'$escaped'"
-    }
-
+    // TODO: Move to an abstraction
     private fun updateCondition(
         resource: DatabaseClaim,
         type: String,
@@ -250,5 +177,17 @@ class DatabaseClaimReconciler(
             conditions.removeIf { it.type == type }
             conditions.add(newCondition)
         }
+    }
+
+    // TODO: Move to an abstraction
+    private fun failWith(
+        resource: DatabaseClaim,
+        reason: String,
+        message: String,
+    ): UpdateControl<DatabaseClaim> {
+        resource.status.phase = "Failed"
+        resource.status.message = message
+        updateCondition(resource, "Ready", "False", reason, message)
+        return UpdateControl.patchStatus(resource)
     }
 }

@@ -1,4 +1,4 @@
-package com.superkooka.operator.postgres
+package com.superkooka.operator.postgres.api
 
 import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.Namespaced
