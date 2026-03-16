@@ -1,5 +1,6 @@
 package com.superkooka.operator.postgres
 
+import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -11,6 +12,9 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl
 import java.security.SecureRandom
 import java.sql.DriverManager
 import java.sql.SQLException
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 
 private val logger = KotlinLogging.logger {}
@@ -23,16 +27,18 @@ class DatabaseClaimReconciler(
         resource: DatabaseClaim,
         context: Context<DatabaseClaim>,
     ): UpdateControl<DatabaseClaim> {
+        val status = resource.status ?: DatabaseClaimStatus()
+        resource.status = status
+        status.observedGeneration = resource.metadata.generation
+
         val name = resource.metadata.name
         val namespace = resource.metadata.namespace
         val spec =
             resource.spec ?: run {
                 logger.error { "DatabaseClaim '$name' has no spec" }
-                resource.status =
-                    DatabaseClaimStatus().apply {
-                        phase = "Failed"
-                        message = "Missing spec"
-                    }
+                status.phase = "Failed"
+                status.message = "Missing spec"
+                updateCondition(resource, "Ready", "False", "MissingSpec", "DatabaseClaim has no spec")
                 return UpdateControl.patchStatus(resource)
             }
 
@@ -43,11 +49,9 @@ class DatabaseClaimReconciler(
                 .withName(spec.postgresRef.name)
                 .get() ?: run {
                 logger.error { "Service '${spec.postgresRef.name}' not found" }
-                resource.status =
-                    DatabaseClaimStatus().apply {
-                        phase = "Failed"
-                        message = "Service '${spec.postgresRef.name}' not found"
-                    }
+                status.phase = "Failed"
+                status.message = "Service '${spec.postgresRef.name}' not found"
+                updateCondition(resource, "Ready", "False", "ServiceNotFound", "Service '${spec.postgresRef.name}' not found")
                 return UpdateControl.patchStatus(resource)
             }
 
@@ -58,11 +62,9 @@ class DatabaseClaimReconciler(
                 .withName(spec.credentialsRef.name)
                 .get() ?: run {
                 logger.error { "Secret '${spec.credentialsRef.name}' not found" }
-                resource.status =
-                    DatabaseClaimStatus().apply {
-                        phase = "Failed"
-                        message = "Secret '${spec.credentialsRef.name}' not found"
-                    }
+                status.phase = "Failed"
+                status.message = "Secret '${spec.credentialsRef.name}' not found"
+                updateCondition(resource, "Ready", "False", "SecretNotFound", "Secret '${spec.credentialsRef.name}' not found")
                 return UpdateControl.patchStatus(resource)
             }
 
@@ -77,11 +79,9 @@ class DatabaseClaimReconciler(
         logger.info { "Reconciling DatabaseClaim '$name' in '$namespace'" }
 
         createDatabase(host, port, username, password, spec.database)
-        resource.status =
-            DatabaseClaimStatus().apply {
-                phase = "Running"
-                message = "Database $name is ready"
-            }
+        status.phase = "Running"
+        status.message = "Database $name is ready"
+        updateCondition(resource, "DatabaseReady", "True", "Success", "Database created successfully")
 
         val random = SecureRandom()
         val rolePassword =
@@ -127,11 +127,10 @@ class DatabaseClaimReconciler(
             .resource(roleSecret)
             .serverSideApply()
 
-        resource.status =
-            DatabaseClaimStatus().apply {
-                phase = "Ready"
-                message = "Role for $name is ready"
-            }
+        status.phase = "Ready"
+        status.message = "Role for $name is ready"
+        status.connectionSecret = "$name-credentials"
+        updateCondition(resource, "Ready", "True", "Success", "Database and Role are ready")
 
         logger.info { "DatabaseClaim '$name' reconciled successfully" }
 
@@ -226,5 +225,30 @@ class DatabaseClaimReconciler(
     private fun java.sql.Connection.escapeString(value: String): String {
         val escaped = value.replace("'", "''")
         return "'$escaped'"
+    }
+
+    private fun updateCondition(
+        resource: DatabaseClaim,
+        type: String,
+        status: String,
+        reason: String,
+        message: String,
+    ) {
+        val conditions = resource.status.conditions
+        val existing = conditions.find { it.type == type }
+
+        if (existing == null || existing.status != status || existing.reason != reason || existing.message != message) {
+            val now = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_INSTANT)
+            val newCondition =
+                Condition().apply {
+                    this.type = type
+                    this.status = status
+                    this.reason = reason
+                    this.message = message
+                    this.lastTransitionTime = now
+                }
+            conditions.removeIf { it.type == type }
+            conditions.add(newCondition)
+        }
     }
 }

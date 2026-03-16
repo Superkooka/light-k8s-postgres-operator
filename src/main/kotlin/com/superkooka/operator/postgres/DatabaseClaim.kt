@@ -1,5 +1,6 @@
 package com.superkooka.operator.postgres
 
+import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.Namespaced
 import io.fabric8.kubernetes.client.CustomResource
 import io.fabric8.kubernetes.model.annotation.Group
@@ -27,4 +28,6 @@ class DatabaseClaimStatus {
     var phase: String = "Pending"
     var message: String = ""
     var connectionSecret: String = ""
+    var conditions: MutableList<Condition> = mutableListOf()
+    var observedGeneration: Long? = null
 }
