@@ -1,7 +1,7 @@
 - [x] Create role
 - [x] Create a Secret with postgres password
-- [ ] Github Action CI
-- [ ] Renovate
+- [x] Github Action CI
+- [x] Renovate
 - [ ] Architecture
 - [ ] Add unit/e2e tests
 - [ ] Add documentation
