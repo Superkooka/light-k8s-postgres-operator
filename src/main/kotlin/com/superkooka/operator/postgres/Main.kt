@@ -1,5 +1,6 @@
 package com.superkooka.operator.postgres
 
+import com.superkooka.operator.postgres.reconcilier.DatabaseClaimReconciler
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.javaoperatorsdk.operator.Operator

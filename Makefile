@@ -64,7 +64,7 @@ cluster-up:
 		echo "Cluster '$(CLUSTER)' already exists, skipping."; \
 	else \
 		echo "Creating k3d cluster '$(CLUSTER)'..."; \
-		k3d cluster create $(CLUSTER) --agents 1; \
+		k3d cluster create $(CLUSTER) --agents 1 --kubeconfig-update-default=false --kubeconfig-switch-context=false; \
 		echo "Cluster OK"; \
 	fi
 

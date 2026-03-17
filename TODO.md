@@ -2,7 +2,7 @@
 - [x] Create a Secret with postgres password
 - [x] Github Action CI
 - [x] Renovate
-- [ ] Architecture
+- [x] Architecture
 - [ ] Add unit/e2e tests
 - [ ] Add documentation
 - [ ] Split DatabaseClaim responsibility into PostgresRole/Claim CRD
