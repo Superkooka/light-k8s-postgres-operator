@@ -31,12 +31,20 @@ class RoleProvisioner(
         roleName: String,
         newPassword: String,
     ) {
-        connectionFactory.connect().use { conn ->
-            val quotedPassword = quoteLiteral(conn, newPassword)
-            conn.createStatement().execute(
-                """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD $quotedPassword""",
+        try {
+            connectionFactory.connect().use { conn ->
+                val quotedPassword = quoteLiteral(conn, newPassword)
+                conn.createStatement().execute(
+                    """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD $quotedPassword""",
+                )
+                logger.info { "Password updated for role '$roleName'" }
+            }
+        } catch (e: SQLException) {
+            throw ProvisioningException(
+                ProvisioningError.ROLE_PASSWORD_UPDATE_FAILED,
+                "Failed to update password for role '$roleName'",
+                e,
             )
-            logger.info { "Password updated for role '$roleName'" }
         }
     }
 
@@ -54,11 +62,19 @@ class RoleProvisioner(
         roleName: String,
         rolePassword: String,
     ) {
-        val quotedPassword = quoteLiteral(conn, rolePassword)
-        conn.createStatement().execute(
-            """CREATE ROLE "${roleName.validateIdentifier()}" WITH LOGIN PASSWORD $quotedPassword""",
-        )
-        logger.info { "Role '$roleName' created" }
+        try {
+            val quotedPassword = quoteLiteral(conn, rolePassword)
+            conn.createStatement().execute(
+                """CREATE ROLE "${roleName.validateIdentifier()}" WITH LOGIN PASSWORD $quotedPassword""",
+            )
+            logger.info { "Role '$roleName' created" }
+        } catch (e: SQLException) {
+            throw ProvisioningException(
+                ProvisioningError.ROLE_CREATE_FAILED,
+                "Failed to create role '$roleName'",
+                e,
+            )
+        }
     }
 
     private fun grantPrivileges(
@@ -79,8 +95,11 @@ class RoleProvisioner(
             grants.forEach { sql -> conn.createStatement().execute(sql) }
             logger.info { "Privileges on '$dbName' granted to '$roleName'" }
         } catch (e: SQLException) {
-            logger.error { "Failed to grant privileges on '$dbName' to '$roleName': ${e.message}" }
-            throw e
+            throw ProvisioningException(
+                ProvisioningError.ROLE_PRIVILEGES_GRANT_FAILED,
+                "Failed to grant privileges on '$dbName' to '$roleName'",
+                e,
+            )
         }
     }
 
