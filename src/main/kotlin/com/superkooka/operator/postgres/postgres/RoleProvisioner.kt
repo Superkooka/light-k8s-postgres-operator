@@ -15,7 +15,7 @@ class RoleProvisioner(
         dbName: String,
     ) {
         connectionFactory.connect().use { conn ->
-            if (!roleExists(roleName)) {
+            if (!roleExists(conn, roleName)) {
                 createRole(conn, roleName, rolePassword)
             } else {
                 logger.info { "Role '$roleName' already exists, skipping creation" }
@@ -32,21 +32,21 @@ class RoleProvisioner(
         newPassword: String,
     ) {
         connectionFactory.connect().use { conn ->
+            val quotedPassword = quoteLiteral(conn, newPassword)
             conn.createStatement().execute(
-                """ALTER ROLE "$roleName" WITH PASSWORD ${conn.escapeString(newPassword)}""",
+                """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD $quotedPassword""",
             )
             logger.info { "Password updated for role '$roleName'" }
         }
     }
 
-    fun roleExists(roleName: String): Boolean =
-        connectionFactory.connect().use { conn ->
-            conn
-                .prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?")
-                .use { stmt ->
-                    stmt.setString(1, roleName)
-                    stmt.executeQuery().next()
-                }
+    private fun roleExists(
+        conn: Connection,
+        roleName: String,
+    ): Boolean =
+        conn.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?").use { stmt ->
+            stmt.setString(1, roleName)
+            stmt.executeQuery().next()
         }
 
     private fun createRole(
@@ -54,8 +54,9 @@ class RoleProvisioner(
         roleName: String,
         rolePassword: String,
     ) {
+        val quotedPassword = quoteLiteral(conn, rolePassword)
         conn.createStatement().execute(
-            """CREATE ROLE "$roleName" WITH LOGIN PASSWORD ${conn.escapeString(rolePassword)}""",
+            """CREATE ROLE "${roleName.validateIdentifier()}" WITH LOGIN PASSWORD $quotedPassword""",
         )
         logger.info { "Role '$roleName' created" }
     }
@@ -67,11 +68,11 @@ class RoleProvisioner(
     ) {
         val grants =
             listOf(
-                """GRANT USAGE ON SCHEMA public TO "$roleName"""",
-                """GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$roleName"""",
-                """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$roleName"""",
-                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$roleName"""",
-                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "$roleName"""",
+                """GRANT USAGE ON SCHEMA public TO "${roleName.validateIdentifier()}"""",
+                """GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${roleName.validateIdentifier()}"""",
+                """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${roleName.validateIdentifier()}"""",
+                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${roleName.validateIdentifier()}"""",
+                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "${roleName.validateIdentifier()}"""",
             )
 
         try {
@@ -83,8 +84,22 @@ class RoleProvisioner(
         }
     }
 
-    private fun Connection.escapeString(value: String): String {
-        val escaped = value.replace("'", "''")
-        return "'$escaped'"
+    private fun quoteLiteral(
+        conn: Connection,
+        value: String,
+    ): String =
+        conn.prepareStatement("SELECT quote_literal(?)").use { stmt ->
+            stmt.setString(1, value)
+            stmt.executeQuery().use { rs ->
+                rs.next()
+                rs.getString(1)
+            }
+        }
+
+    private fun String.validateIdentifier(): String {
+        require(this.matches(Regex("^[a-zA-Z0-9_\\-]+$"))) {
+            "Invalid identifier: $this"
+        }
+        return this
     }
 }

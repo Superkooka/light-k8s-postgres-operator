@@ -1,6 +1,7 @@
 package com.superkooka.operator.postgres.postgres
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.sql.Connection
 import java.sql.SQLException
 
 private val logger = KotlinLogging.logger {}
@@ -9,12 +10,13 @@ class DatabaseProvisioner(
     private val connectionFactory: PostgresConnectionFactory,
 ) {
     fun ensureDatabase(dbName: String) {
+        dbName.validateIdentifier()
+
         try {
             connectionFactory.connect().use { conn ->
-                if (!this.databaseExists(dbName)) {
-                    conn.prepareStatement("""CREATE DATABASE ?""").use { stmt ->
-                        stmt.setString(1, dbName)
-                        stmt.execute()
+                if (!conn.databaseExists(dbName)) {
+                    conn.createStatement().use { stmt ->
+                        stmt.execute("""CREATE DATABASE "$dbName"""")
                     }
                     logger.info { "Database '$dbName' created" }
                 } else {
@@ -30,13 +32,14 @@ class DatabaseProvisioner(
         }
     }
 
-    fun databaseExists(dbName: String): Boolean =
-        connectionFactory.connect().use { conn ->
-            conn
-                .prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")
-                .use { stmt ->
-                    stmt.setString(1, dbName)
-                    stmt.executeQuery().next()
-                }
+    private fun Connection.databaseExists(dbName: String): Boolean =
+        prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?").use { stmt ->
+            stmt.setString(1, dbName)
+            stmt.executeQuery().next()
         }
+
+    private fun String.validateIdentifier(): String {
+        require(matches(Regex("^[a-zA-Z0-9_\\-]+$"))) { "Invalid identifier: $this" }
+        return this
+    }
 }
