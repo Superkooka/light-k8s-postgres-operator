@@ -1,4 +1,4 @@
-apiVersion: superkooka.com/v1
+apiVersion: postgres.operator.superkooka.com/v1beta1
 kind: DatabaseClaim
 metadata:
   name: my-app-db

@@ -6,8 +6,8 @@ import io.fabric8.kubernetes.client.CustomResource
 import io.fabric8.kubernetes.model.annotation.Group
 import io.fabric8.kubernetes.model.annotation.Version
 
-@Group("superkooka.com")
-@Version("v1")
+@Group("postgres.operator.superkooka.com")
+@Version("v1beta1")
 class DatabaseClaim :
     CustomResource<DatabaseClaimSpec, DatabaseClaimStatus>(),
     Namespaced

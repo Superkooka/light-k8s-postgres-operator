@@ -17,7 +17,8 @@ awaitility = "4.3.0"
 josdk-bom = { module = "io.javaoperatorsdk:operator-framework-bom", version.ref = "josdk" }
 josdk-framework = { module = "io.javaoperatorsdk:operator-framework" }
 josdk-junit5 = { module = "io.javaoperatorsdk:operator-framework-junit-5" }
-fabric8-crd-generator = { module = "io.fabric8:crd-generator-apt", version.ref = "fabric8-crd" }
+fabric8-crd-generator-v2 = { module = "io.fabric8:crd-generator-api-v2", version.ref = "fabric8-crd" }
+fabric8-crd-collector = { module = "io.fabric8:crd-generator-collector", version.ref = "fabric8-crd" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
@@ -28,6 +29,5 @@ awaitility-kotlin = { module = "org.awaitility:awaitility-kotlin", version.ref =
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 jib = { id = "com.google.cloud.tools.jib", version.ref = "jib" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-plugin" }

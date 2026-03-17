@@ -1,9 +1,17 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import io.fabric8.crd.generator.collector.CustomResourceCollector
+import io.fabric8.crdv2.generator.CRDGenerationInfo
+import io.fabric8.crdv2.generator.CRDGenerator
+import java.nio.file.Files
+
+buildscript {
+    dependencies {
+        classpath(libs.fabric8.crd.generator.v2)
+        classpath(libs.fabric8.crd.collector)
+    }
+}
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.kapt)
     application
     alias(libs.plugins.jib)
     alias(libs.plugins.ktlint)
@@ -26,7 +34,6 @@ dependencies {
     // java-operator-sdk core
     implementation(platform(libs.josdk.bom))
     implementation(libs.josdk.framework)
-    kapt(libs.fabric8.crd.generator)
 
     implementation(libs.postgresql)
 
@@ -50,10 +57,10 @@ ktlint {
     verbose.set(true)
 }
 
-tasks.withType<KotlinCompile> {
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict") // strict java's nullability annotation
-        jvmTarget.set(JvmTarget.JVM_21)
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
@@ -71,19 +78,59 @@ tasks.register<Test>("e2eTest") {
 
 val chartsDirectory = project.findProperty("chartsDirectory") as String? ?: "charts/"
 
+// From https://github.com/fabric8io/kubernetes-client/blob/main/crd-generator/gradle/README.md
+tasks.register("generateCrds") {
+    description = "Generate CRDs from compiled custom resource classes"
+    group = "crd"
+
+    val sourceSet = project.sourceSets["main"]
+
+    val compileClasspathElements = sourceSet.compileClasspath.map { e -> e.absolutePath }
+
+    val outputClassesDirs = sourceSet.output.classesDirs
+    val outputClasspathElements = outputClassesDirs.map { d -> d.absolutePath }
+
+    val classpathElements = listOf(outputClasspathElements, compileClasspathElements).flatten()
+    val filesToScan = outputClassesDirs.filter { it.exists() }.toList()
+    val outputDir = sourceSet.output.resourcesDir
+
+    doLast {
+        Files.createDirectories(outputDir!!.toPath())
+
+        val collector =
+            CustomResourceCollector()
+                .withParentClassLoader(Thread.currentThread().contextClassLoader)
+                .withClasspathElements(classpathElements)
+                .withFilesToScan(filesToScan)
+
+        val crdGenerator =
+            CRDGenerator()
+                .customResourceClasses(collector.findCustomResourceClasses())
+                .inOutputDir(outputDir)
+
+        val crdGenerationInfo: CRDGenerationInfo = crdGenerator.detailedGenerate()
+
+        crdGenerationInfo.crdDetailsPerNameAndVersion.forEach { (crdName, versionToInfo) ->
+            println("Generated CRD $crdName:")
+            versionToInfo.forEach { (version, info) -> println(" $version -> ${info.filePath}") }
+        }
+    }
+
+    dependsOn("compileKotlin")
+}
+
 tasks.register<Copy>("syncCrds") {
     group = "helm"
 
     val chartDir = chartsDirectory
 
     from(
-        fileTree("build/tmp/kapt3/classes/main/META-INF/fabric8") {
+        fileTree(layout.buildDirectory.dir("resources/main/")) {
             include("*.yml")
-            exclude("*v1beta1*")
         },
     )
     into("$chartDir/crds")
-    dependsOn("kaptKotlin")
+    dependsOn("generateCrds")
 }
 
 tasks.register("syncHelmVersion") {
@@ -116,6 +163,7 @@ tasks.register("syncHelmVersion") {
 
 tasks.named("jibDockerBuild") {
     notCompatibleWithConfigurationCache("Jib plugin is not compatible with configuration cache")
+    doNotTrackState("Jib manages its own up-to-date checking")
 }
 
 jib {
