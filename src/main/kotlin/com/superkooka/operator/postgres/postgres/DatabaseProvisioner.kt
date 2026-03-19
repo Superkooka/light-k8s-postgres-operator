@@ -3,13 +3,15 @@ package com.superkooka.operator.postgres.postgres
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.sql.Connection
 import java.sql.SQLException
+import kotlin.use
 
 private val logger = KotlinLogging.logger {}
 
-class DatabaseProvisioner(
-    private val connectionFactory: PostgresConnectionFactory,
-) {
-    fun ensureDatabase(dbName: String) {
+class DatabaseProvisioner {
+    fun ensureDatabase(
+        connectionFactory: PostgresConnectionFactory,
+        dbName: String,
+    ) {
         dbName.validateIdentifier()
 
         try {
@@ -18,9 +20,9 @@ class DatabaseProvisioner(
                     conn.createStatement().use { stmt ->
                         stmt.execute("""CREATE DATABASE "$dbName"""")
                     }
-                    logger.info { "Database '$dbName' created" }
+                    logger.info { "Database '$dbName' created on ${connectionFactory.credentials.host}" }
                 } else {
-                    logger.info { "Database '$dbName' already exists, skipping" }
+                    logger.info { "Database '$dbName' already exists, skipping creation" }
                 }
             }
         } catch (e: SQLException) {
@@ -37,9 +39,4 @@ class DatabaseProvisioner(
             stmt.setString(1, dbName)
             stmt.executeQuery().next()
         }
-
-    private fun String.validateIdentifier(): String {
-        require(matches(Regex("^[a-zA-Z0-9_\\-]+$"))) { "Invalid identifier: $this" }
-        return this
-    }
 }

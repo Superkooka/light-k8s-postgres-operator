@@ -19,6 +19,10 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+      {{- with .Values.operator.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"

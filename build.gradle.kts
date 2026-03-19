@@ -161,9 +161,10 @@ tasks.register("syncHelmVersion") {
     }
 }
 
-tasks.named("jibDockerBuild") {
-    notCompatibleWithConfigurationCache("Jib plugin is not compatible with configuration cache")
-    doNotTrackState("Jib manages its own up-to-date checking")
+listOf("jibDockerBuild", "jibBuildTar", "jib").forEach { taskName ->
+    getTasksByName(taskName, true).forEach { task ->
+        task.notCompatibleWithConfigurationCache("Jib is not compatible with configuration cache")
+    }
 }
 
 jib {

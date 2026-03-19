@@ -6,7 +6,7 @@ NAMESPACE := default
 KUBECTL   := kubectl --context=$(CONTEXT)
 HELM      := helm --kube-context=$(CONTEXT)
 CHART_NAME := light-k8s-postgres-operator
-GRADLEW_EXTRA_ARGUMENTS := -PchartsDirectory=charts-local/
+GRADLEW_EXTRA_ARGUMENTS := -PchartsDirectory=charts/
 
 .DEFAULT_GOAL := run
 
@@ -23,9 +23,9 @@ check-dependencies:
 
 .PHONY: init
 init:
-	@if [ ! -d charts-local/ ]; then \
-		cp -r charts/ charts-local/; \
-		echo "charts/ copied to charts-local/"; \
+	@if [ ! -f values.local.yaml ]; then \
+        cp charts/values.local.yaml ./values.local.yaml; \
+        echo "values.local.yaml created from example, edit it before running."; \
 	fi
 	
 .PHONY: run
@@ -86,15 +86,17 @@ _check-context:
 	fi
 
 .PHONY: deploy
-deploy: image _check-context
+deploy: syncCrds image _check-context
 	@echo "Importing image into k3d..."
 	k3d image import $(IMAGE):$(VERSION) --cluster $(CLUSTER)
 	@echo "Deploying via Helm..."
 	@EXTRA_VALUES=""; \
-	$(HELM) upgrade --install $(CHART_NAME) charts-local/ \
+	$(HELM) dependency update charts/
+	$(KUBECTL) apply -f charts/crds/
+	$(HELM) upgrade --install $(CHART_NAME) charts/ \
 		--namespace $(NAMESPACE) \
-		--values charts-local/values.yaml \
-		--values charts-local/values.local.yaml \
+		--values charts/values.yaml \
+		--values ./values.local.yaml \
 		--wait --timeout 2m
 	@echo "Deploy OK"
 

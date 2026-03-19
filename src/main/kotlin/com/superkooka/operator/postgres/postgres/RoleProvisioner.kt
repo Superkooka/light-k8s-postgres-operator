@@ -3,122 +3,163 @@ package com.superkooka.operator.postgres.postgres
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.sql.Connection
 import java.sql.SQLException
+import kotlin.use
 
 private val logger = KotlinLogging.logger {}
 
-class RoleProvisioner(
-    private val connectionFactory: PostgresConnectionFactory,
-) {
+class RoleProvisioner {
     fun ensureRole(
+        connectionFactory: PostgresConnectionFactory,
         roleName: String,
-        rolePassword: String,
-        dbName: String,
-    ) {
-        connectionFactory.connect().use { conn ->
-            if (!roleExists(conn, roleName)) {
-                createRole(conn, roleName, rolePassword)
-            } else {
-                logger.info { "Role '$roleName' already exists, skipping creation" }
-            }
-        }
-
-        connectionFactory.connect(dbName).use { conn ->
-            grantPrivileges(conn, roleName, dbName)
-        }
-    }
-
-    fun updatePassword(
-        roleName: String,
-        newPassword: String,
+        login: Boolean,
+        password: String? = null,
     ) {
         try {
             connectionFactory.connect().use { conn ->
-                val quotedPassword = quoteLiteral(conn, newPassword)
-                conn.createStatement().execute(
-                    """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD $quotedPassword""",
-                )
-                logger.info { "Password updated for role '$roleName'" }
+                val exists = roleExists(conn, roleName)
+
+                val loginClause = if (login) "LOGIN" else "NOLOGIN"
+                val passwordClause =
+                    if (login && password != null) {
+                        "PASSWORD ${quoteLiteral(conn, password)}"
+                    } else {
+                        ""
+                    }
+
+                if (!exists) {
+                    conn.createStatement().execute(
+                        """CREATE ROLE "${roleName.validateIdentifier()}" $loginClause $passwordClause""",
+                    )
+                    logger.info { "Role '$roleName' created (login=$login)" }
+                } else if (login && password != null) {
+                    conn.createStatement().execute(
+                        """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD ${quoteLiteral(conn, password)} $loginClause""",
+                    )
+                    logger.info { "Role '$roleName' updated (password reset)" }
+                } else {
+                    conn.createStatement().execute(
+                        """ALTER ROLE "${roleName.validateIdentifier()}" WITH $loginClause""",
+                    )
+                    logger.info { "Role '$roleName' exists, updated attributes (login=$login)" }
+                }
             }
         } catch (e: SQLException) {
             throw ProvisioningException(
-                ProvisioningError.ROLE_PASSWORD_UPDATE_FAILED,
-                "Failed to update password for role '$roleName'",
-                e,
-            )
-        }
-    }
-
-    private fun roleExists(
-        conn: Connection,
-        roleName: String,
-    ): Boolean =
-        conn.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?").use { stmt ->
-            stmt.setString(1, roleName)
-            stmt.executeQuery().next()
-        }
-
-    private fun createRole(
-        conn: Connection,
-        roleName: String,
-        rolePassword: String,
-    ) {
-        try {
-            val quotedPassword = quoteLiteral(conn, rolePassword)
-            conn.createStatement().execute(
-                """CREATE ROLE "${roleName.validateIdentifier()}" WITH LOGIN PASSWORD $quotedPassword""",
-            )
-            logger.info { "Role '$roleName' created" }
-        } catch (e: SQLException) {
-            throw ProvisioningException(
                 ProvisioningError.ROLE_CREATE_FAILED,
-                "Failed to create role '$roleName'",
+                "Failed to ensure role '$roleName'",
                 e,
             )
         }
     }
 
-    private fun grantPrivileges(
-        conn: Connection,
+    fun grantDatabasePermissions(
+        connectionFactory: PostgresConnectionFactory,
         roleName: String,
         dbName: String,
+        permissions: List<Permission>,
     ) {
-        val grants =
-            listOf(
-                """GRANT USAGE ON SCHEMA public TO "${roleName.validateIdentifier()}"""",
-                """GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${roleName.validateIdentifier()}"""",
-                """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${roleName.validateIdentifier()}"""",
-                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${roleName.validateIdentifier()}"""",
-                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "${roleName.validateIdentifier()}"""",
-            )
-
+        if (permissions.isEmpty()) return
+        val privs = permissions.joinToString(", ")
         try {
-            grants.forEach { sql -> conn.createStatement().execute(sql) }
-            logger.info { "Privileges on '$dbName' granted to '$roleName'" }
+            connectionFactory.connect().use { conn ->
+                conn.createStatement().execute(
+                    """GRANT $privs ON DATABASE "${dbName.validateIdentifier()}" TO "${roleName.validateIdentifier()}"""",
+                )
+            }
+            logger.info { "Granted $privs on database '$dbName' to role '$roleName'" }
         } catch (e: SQLException) {
             throw ProvisioningException(
                 ProvisioningError.ROLE_PRIVILEGES_GRANT_FAILED,
-                "Failed to grant privileges on '$dbName' to '$roleName'",
+                "Failed to grant $privs on database '$dbName' to role '$roleName'",
                 e,
             )
         }
     }
+
+    fun revokeDatabasePermissions(
+        connectionFactory: PostgresConnectionFactory,
+        roleName: String,
+        dbName: String,
+        permissions: List<Permission>,
+    ) {
+        if (permissions.isEmpty()) return
+        val privs = permissions.joinToString(", ")
+        try {
+            connectionFactory.connect().use { conn ->
+                conn.createStatement().execute(
+                    """REVOKE $privs ON DATABASE "${dbName.validateIdentifier()}" FROM "${roleName.validateIdentifier()}"""",
+                )
+            }
+            logger.info { "Revoked $privs from database '$dbName' for role '$roleName'" }
+        } catch (e: SQLException) {
+            throw ProvisioningException(
+                ProvisioningError.ROLE_PRIVILEGES_REVOKE_FAILED,
+                "Failed to revoke $privs from database '$dbName' for role '$roleName'",
+                e,
+            )
+        }
+    }
+
+    fun grantRole(
+        connectionFactory: PostgresConnectionFactory,
+        parent: String,
+        child: String,
+    ) {
+        try {
+            connectionFactory.connect().use { conn ->
+                conn.createStatement().execute(
+                    """GRANT "${parent.validateIdentifier()}" TO "${child.validateIdentifier()}"""",
+                )
+            }
+            logger.info { "Granted role '$parent' to '$child'" }
+        } catch (e: SQLException) {
+            throw ProvisioningException(
+                ProvisioningError.ROLE_PRIVILEGES_GRANT_FAILED,
+                "Failed to grant role '$parent' to '$child'",
+                e,
+            )
+        }
+    }
+
+    fun revokeRole(
+        connectionFactory: PostgresConnectionFactory,
+        parent: String,
+        child: String,
+    ) {
+        try {
+            connectionFactory.connect().use { conn ->
+                conn.createStatement().execute(
+                    """REVOKE "${parent.validateIdentifier()}" FROM "${child.validateIdentifier()}"""",
+                )
+            }
+            logger.info { "Revoked role '$parent' from '$child'" }
+        } catch (e: SQLException) {
+            throw ProvisioningException(
+                ProvisioningError.ROLE_PRIVILEGES_REVOKE_FAILED,
+                "Failed to revoke role '$parent' from '$child'",
+                e,
+            )
+        }
+    }
+
+    fun roleExists(
+        conn: Connection,
+        roleName: String,
+    ): Boolean =
+        conn.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?").use {
+            it.setString(1, roleName)
+            it.executeQuery().next()
+        }
 
     private fun quoteLiteral(
         conn: Connection,
         value: String,
     ): String =
-        conn.prepareStatement("SELECT quote_literal(?)").use { stmt ->
-            stmt.setString(1, value)
-            stmt.executeQuery().use { rs ->
+        conn.prepareStatement("SELECT quote_literal(?)").use {
+            it.setString(1, value)
+            it.executeQuery().use { rs ->
                 rs.next()
                 rs.getString(1)
             }
         }
-
-    private fun String.validateIdentifier(): String {
-        require(this.matches(Regex("^[a-zA-Z0-9_\\-]+$"))) {
-            "Invalid identifier: $this"
-        }
-        return this
-    }
 }

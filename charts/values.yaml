@@ -1,8 +1,9 @@
 operator:
   image:
-    repository: light-k8s-postgres-operator
+    repository: ghcr.io/superkooka/light-k8s-postgres-operator
     tag: "early-dev"  # managed-by-gradle
     pullPolicy: IfNotPresent
+    pullSecrets: []
   # healthPort: 8080
   # metricsPort: 8081
   # leaderElection: false
@@ -17,25 +18,11 @@ operator:
   serviceAccount:
     name: my-operator
 
-postgres:
+postgresql:
   enabled: false
-  image:
-    repository: postgres
-    tag: 18
-    pullPolicy: IfNotPresent
-  serviceName: postgres
-  secretName: postgres-admin-credentials
-  credentials:
-    username: postgres
-    password: changeme
-    database: postgres
-  resources:
-    limits:
-      memory: 512Mi
-      cpu: 500m
-    requests:
-      memory: 256Mi
-      cpu: 100m
-  storage:
-    type: emptyDir
-    size: 1Gi
+  auth:
+    enablePostgresUser: true
+    postgresPassword: ""
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: postgres-password

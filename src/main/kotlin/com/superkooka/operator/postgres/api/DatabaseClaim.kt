@@ -1,5 +1,6 @@
 package com.superkooka.operator.postgres.api
 
+import com.superkooka.operator.postgres.postgres.Permission
 import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.Namespaced
 import io.fabric8.kubernetes.client.CustomResource
@@ -13,21 +14,35 @@ class DatabaseClaim :
     Namespaced
 
 class DatabaseClaimSpec {
-    lateinit var postgresRef: ResourceRef
-    lateinit var credentialsRef: ResourceRef
+    lateinit var instanceRef: ResourceRef
     lateinit var database: String
-    lateinit var owner: String
+    var schemas: List<DatabaseSchema> = emptyList()
+    var roles: List<DatabaseRole> = emptyList()
+    var users: List<DatabaseUser> = emptyList()
 }
 
-class ResourceRef {
+class DatabaseSchema {
     lateinit var name: String
-    var namespace: String? = null
+}
+
+class DatabaseRole {
+    lateinit var name: String
+    var schemas: Map<String, RoleSchemaPermissions> = emptyMap()
+}
+
+class RoleSchemaPermissions {
+    var permissions: List<Permission> = emptyList()
+}
+
+class DatabaseUser {
+    lateinit var name: String
+    lateinit var secretName: String
+    var roles: List<String> = emptyList()
 }
 
 class DatabaseClaimStatus {
     var phase: String = "Pending"
     var message: String = ""
-    var connectionSecret: String = ""
     var conditions: MutableList<Condition> = mutableListOf()
     var observedGeneration: Long? = null
 }
