@@ -33,4 +33,4 @@ e2e kotlin: edge cases, resiliency
 `make cs-fix` to run linter
 
 
-`KUBECONFIG=$(k3d kubeconfig write light-k8s-postgres-operator) k9s` Launch k9s connected to the dev cluster
+`KUBECONFIG=$(k3d kubeconfig write light-k8s-postgres-operator-dev) k9s` Launch k9s connected to the dev cluster

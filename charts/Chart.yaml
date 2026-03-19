@@ -4,3 +4,10 @@ description: Kubernetes operator for managing PostgreSQL databases
 type: application
 version: 1.0.0
 appVersion: "early-dev"  # managed-by-gradle
+
+dependencies:
+  - name: postgresql
+    version: "18.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+    alias: postgresql
