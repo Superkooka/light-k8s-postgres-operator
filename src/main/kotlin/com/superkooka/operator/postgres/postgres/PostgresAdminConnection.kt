@@ -20,3 +20,8 @@ class PostgresConnectionFactory(
         }
     }
 }
+
+fun String.validateIdentifier(): String {
+    require(this.matches(Regex("^[a-zA-Z0-9_\\-]+$"))) { "Invalid identifier: $this" }
+    return this
+}

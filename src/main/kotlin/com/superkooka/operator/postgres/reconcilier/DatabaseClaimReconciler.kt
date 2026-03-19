@@ -3,11 +3,12 @@ package com.superkooka.operator.postgres.reconcilier
 import com.superkooka.operator.postgres.api.DatabaseClaim
 import com.superkooka.operator.postgres.api.DatabaseClaimStatus
 import com.superkooka.operator.postgres.api.PostgresInstance
+import com.superkooka.operator.postgres.kubernetes.PostgresConnectionFactoryProvider
 import com.superkooka.operator.postgres.postgres.DatabaseProvisioner
-import com.superkooka.operator.postgres.postgres.PostgresAdminCredentials
-import com.superkooka.operator.postgres.postgres.PostgresConnectionFactory
+import com.superkooka.operator.postgres.postgres.Permission
 import com.superkooka.operator.postgres.postgres.ProvisioningException
 import com.superkooka.operator.postgres.postgres.RoleProvisioner
+import com.superkooka.operator.postgres.postgres.SchemaProvisioner
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -23,6 +24,7 @@ private val logger = KotlinLogging.logger {}
 @ControllerConfiguration
 class DatabaseClaimReconciler(
     private val client: KubernetesClient,
+    private val connectionFactoryProvider: PostgresConnectionFactoryProvider,
 ) : AbstractReconciler<DatabaseClaim>() {
     override fun reconcile(
         resource: DatabaseClaim,
@@ -34,11 +36,7 @@ class DatabaseClaimReconciler(
 
         val name = resource.metadata.name
         val namespace = resource.metadata.namespace
-        val spec =
-            resource.spec ?: run {
-                logger.error { "DatabaseClaim '$name' has no spec" }
-                return failWith(resource, "MissingSpec", "DatabaseClaim has no spec")
-            }
+        val spec = resource.spec ?: return failWith(resource, "MissingSpec", "DatabaseClaim $name has no spec")
 
         val instanceRef = spec.instanceRef
         val instanceNamespace = instanceRef.namespace ?: namespace
@@ -47,66 +45,97 @@ class DatabaseClaimReconciler(
                 .resources(PostgresInstance::class.java)
                 .inNamespace(instanceNamespace)
                 .withName(instanceRef.name)
-                .get() ?: run {
-                logger.error { "PostgresInstance '${instanceRef.name}' not found in '$instanceNamespace'" }
-                return failWith(resource, "InstanceNotFound", "PostgresInstance '${instanceRef.name}' not found")
-            }
-
-        val instanceSpec =
-            instance.spec ?: run {
-                return failWith(resource, "InstanceMissingSpec", "PostgresInstance '${instanceRef.name}' has no spec")
-            }
-
-        val serviceRef = instanceSpec.postgresServiceRef
-        val serviceNamespace = serviceRef.namespace ?: instanceNamespace
-        val service =
-            client
-                .services()
-                .inNamespace(serviceNamespace)
-                .withName(serviceRef.name)
-                .get() ?: run {
-                logger.error { "Service '${serviceRef.name}' not found in '$serviceNamespace'" }
-                return failWith(resource, "ServiceNotFound", "Service '${serviceRef.name}' not found")
-            }
-
-        val credentialsRef = instanceSpec.credentialsRef
-        val credentialsNamespace = credentialsRef.namespace ?: instanceNamespace
-        val adminSecret =
-            client
-                .secrets()
-                .inNamespace(credentialsNamespace)
-                .withName(credentialsRef.name)
-                .get() ?: run {
-                logger.error { "Secret '${credentialsRef.name}' not found in '$credentialsNamespace'" }
-                return failWith(resource, "SecretNotFound", "Secret '${credentialsRef.name}' not found")
-            }
-
-        val host = "${service.metadata.name}.${service.metadata.namespace}.svc.cluster.local"
-        val port =
-            service.spec.ports
-                .first()
-                .port
-        val adminUsername = String(Base64.getDecoder().decode(adminSecret.data["username"]))
-        val adminPassword = String(Base64.getDecoder().decode(adminSecret.data["password"]))
-
-        logger.info { "Reconciling DatabaseClaim '$name' in '$namespace'" }
+                .get()
+                ?: return failWith(resource, "InstanceNotFound", "PostgresInstance '${instanceRef.name}' not found")
 
         val connectionFactory =
-            PostgresConnectionFactory(
-                PostgresAdminCredentials(host, port, adminUsername, adminPassword),
+            try {
+                connectionFactoryProvider.getFactory(instance)
+            } catch (e: Exception) {
+                return failWith(resource, "ConnectionError", e.message ?: "Failed to get connection")
+            }
+
+        val userPasswords =
+            spec.users.associate { user ->
+                val userSecret =
+                    client
+                        .secrets()
+                        .inNamespace(namespace)
+                        .withName(user.secretName)
+                        .get()
+                val userPassword =
+                    userSecret?.let { String(Base64.getDecoder().decode(it.data["password"])) }
+                        ?: Base64.getEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
+                user.name to userPassword
+            }
+
+        val databaseProvisioner = DatabaseProvisioner()
+        val roleProvisioner = RoleProvisioner()
+        val schemaProvisioner = SchemaProvisioner()
+
+        try {
+            databaseProvisioner.ensureDatabase(connectionFactory, spec.database)
+
+            val ownerRole = "${spec.database}__owner"
+            roleProvisioner.ensureRole(connectionFactory, ownerRole, login = false)
+            roleProvisioner.grantDatabasePermissions(
+                connectionFactory,
+                ownerRole,
+                spec.database,
+                listOf(Permission.CONNECT, Permission.CREATE),
             )
 
-        val databaseProvisioner = DatabaseProvisioner(connectionFactory)
-        try {
-            databaseProvisioner.ensureDatabase(spec.database)
+            spec.schemas.forEach { schema ->
+                schemaProvisioner.ensureSchema(connectionFactory, spec.database, schema.name, ownerRole)
+                logger.info { "Schema '${schema.name}' provisioned in database '${spec.database}'" }
+            }
+
+            spec.roles.forEach { roleSpec ->
+                roleProvisioner.ensureRole(connectionFactory, roleSpec.name, login = false)
+                roleSpec.schemas.forEach { (schemaName, schemaPerms) ->
+                    schemaProvisioner.grantSchemaPrivileges(
+                        connectionFactory,
+                        spec.database,
+                        schemaName,
+                        roleSpec.name,
+                        schemaPerms.permissions,
+                    )
+                    schemaProvisioner.applyDefaultPrivileges(
+                        connectionFactory,
+                        spec.database,
+                        schemaName,
+                        ownerRole,
+                        roleSpec.name,
+                        schemaPerms.permissions,
+                    )
+                }
+                logger.info { "Role '${roleSpec.name}' provisioned for database '${spec.database}'" }
+            }
+
+            spec.users.forEach { userSpec ->
+                val password =
+                    userPasswords[userSpec.name] ?: throw IllegalArgumentException("Missing password for user '${userSpec.name}'")
+                roleProvisioner.ensureRole(connectionFactory, userSpec.name, login = true, password = password)
+                roleProvisioner.grantDatabasePermissions(
+                    connectionFactory,
+                    userSpec.name,
+                    spec.database,
+                    listOf(Permission.CONNECT),
+                )
+
+                userSpec.roles.forEach { roleName ->
+                    roleProvisioner.grantRole(connectionFactory, roleName, userSpec.name)
+                }
+                logger.info { "User '${userSpec.name}' provisioned and granted roles/permissions" }
+            }
         } catch (e: ProvisioningException) {
-            logger.error { e.message }
             return failWith(resource, e.error.name, e.message)
+        } catch (e: Exception) {
+            return failWith(resource, "ProvisioningError", e.message ?: "Unknown provisioning error")
         }
 
-        updateCondition(resource, "DatabaseReady", "True", "Success", "Database created successfully")
+        updateCondition(resource, "DatabaseReady", "True", "Success", "Database and roles provisioned")
 
-        val roleProvisioner = RoleProvisioner(connectionFactory)
         val ownerRef =
             OwnerReferenceBuilder()
                 .withApiVersion(resource.apiVersion)
@@ -117,29 +146,10 @@ class DatabaseClaimReconciler(
                 .withController(true)
                 .build()
 
-        for (user in spec.users) {
-            val existingSecret =
-                client
-                    .secrets()
-                    .inNamespace(namespace)
-                    .withName(user.secretName)
-                    .get()
-
-            val rolePassword =
-                if (existingSecret != null) {
-                    String(Base64.getDecoder().decode(existingSecret.data["password"]))
-                } else {
-                    Base64.getEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
-                }
-
-            try {
-                roleProvisioner.ensureRole(user.name, rolePassword, spec.database, user.permissions)
-            } catch (e: ProvisioningException) {
-                logger.error { e.message }
-                return failWith(resource, e.error.name, e.message)
-            }
-
-            val userSecret =
+        val creds = connectionFactory.credentials
+        spec.users.forEach { user ->
+            val password = userPasswords[user.name]!!
+            val secret =
                 SecretBuilder()
                     .withNewMetadata()
                     .withName(user.secretName)
@@ -151,16 +161,16 @@ class DatabaseClaimReconciler(
                     .withOwnerReferences(ownerRef)
                     .endMetadata()
                     .addToData("username", Base64.getEncoder().encodeToString(user.name.toByteArray()))
-                    .addToData("password", Base64.getEncoder().encodeToString(rolePassword.toByteArray()))
-                    .addToData("host", Base64.getEncoder().encodeToString(host.toByteArray()))
-                    .addToData("port", Base64.getEncoder().encodeToString(port.toString().toByteArray()))
+                    .addToData("password", Base64.getEncoder().encodeToString(password.toByteArray()))
+                    .addToData("host", Base64.getEncoder().encodeToString(creds.host.toByteArray()))
+                    .addToData("port", Base64.getEncoder().encodeToString(creds.port.toString().toByteArray()))
                     .addToData("database", Base64.getEncoder().encodeToString(spec.database.toByteArray()))
                     .build()
 
             client
                 .secrets()
                 .inNamespace(namespace)
-                .resource(userSecret)
+                .resource(secret)
                 .serverSideApply()
             logger.info { "Secret '${user.secretName}' provisioned for user '${user.name}'" }
         }
@@ -169,7 +179,6 @@ class DatabaseClaimReconciler(
         status.message = "DatabaseClaim '$name' is ready"
         updateCondition(resource, "Ready", "True", "Success", "Database and users are ready")
 
-        logger.info { "DatabaseClaim '$name' reconciled successfully" }
         return UpdateControl.patchStatus(resource)
     }
 }

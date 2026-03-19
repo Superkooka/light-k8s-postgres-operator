@@ -5,9 +5,9 @@ metadata:
   namespace: default
 spec:
   postgresServiceRef:
-    name: postgres
+    name: light-k8s-postgres-operator-postgresql
   credentialsRef:
-    name: postgres-credentials
+    name: light-k8s-postgres-operator-postgresql
 ---
 
 apiVersion: postgres.operator.superkooka.com/v1beta1
@@ -19,10 +19,21 @@ spec:
   instanceRef:
     name: my-postgres-instance
   database: my-app-database
+  schemas:
+    - name: app
+  roles:
+    - name: my-app-rw
+      schemas:
+        app:
+          permissions: [SELECT, INSERT, UPDATE, DELETE]
+    - name: my-app-ro
+      schemas:
+        app:
+          permissions: [SELECT]
   users:
     - name: my-app-user
-      permissions: [CONNECT, CREATE, SELECT, INSERT, UPDATE, DELETE]
+      roles: [my-app-rw]
       secretName: my-app-user-secret
     - name: my-app-readonly
-      permissions: [CONNECT, SELECT]
+      roles: [my-app-ro]
       secretName: my-app-readonly-secret

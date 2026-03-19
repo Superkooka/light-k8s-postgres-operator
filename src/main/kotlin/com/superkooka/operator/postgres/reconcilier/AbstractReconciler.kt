@@ -3,11 +3,14 @@ package com.superkooka.operator.postgres.reconcilier
 import com.superkooka.operator.postgres.api.DatabaseClaim
 import io.fabric8.kubernetes.api.model.Condition
 import io.fabric8.kubernetes.api.model.HasMetadata
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+
+private val logger = KotlinLogging.logger {}
 
 abstract class AbstractReconciler<T : HasMetadata> : Reconciler<T> {
     protected fun updateCondition(
@@ -40,6 +43,8 @@ abstract class AbstractReconciler<T : HasMetadata> : Reconciler<T> {
         reason: String,
         message: String,
     ): UpdateControl<DatabaseClaim> {
+        logger.error { message }
+
         resource.status.phase = "Failed"
         resource.status.message = message
         updateCondition(resource, "Ready", "False", reason, message)

@@ -1,0 +1,13 @@
+operator:
+  image:
+    repository: light-k8s-postgres-operator
+    tag: "early-dev"  # managed-by-gradle
+    pullPolicy: Never
+  leaderElection: false
+
+postgres:
+  enabled: true
+  storage:
+    type: emptyDir
+  auth:
+    postgresPassword: "local"

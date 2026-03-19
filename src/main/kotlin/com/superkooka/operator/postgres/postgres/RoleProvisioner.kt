@@ -1,154 +1,95 @@
 package com.superkooka.operator.postgres.postgres
 
-import com.superkooka.operator.postgres.api.Permission
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.sql.Connection
-import java.sql.SQLException
+import kotlin.use
 
 private val logger = KotlinLogging.logger {}
 
-class RoleProvisioner(
-    private val connectionFactory: PostgresConnectionFactory,
-) {
+class RoleProvisioner {
     fun ensureRole(
+        connectionFactory: PostgresConnectionFactory,
         roleName: String,
-        rolePassword: String,
+        login: Boolean,
+        password: String? = null,
+    ) {
+        connectionFactory.connect().use { conn ->
+            val exists = roleExists(conn, roleName)
+
+            val loginClause = if (login) "LOGIN" else "NOLOGIN"
+            val passwordClause =
+                if (login && password != null) {
+                    "PASSWORD ${quoteLiteral(conn, password)}"
+                } else {
+                    ""
+                }
+
+            if (!exists) {
+                conn.createStatement().execute(
+                    """CREATE ROLE "${roleName.validateIdentifier()}" $loginClause $passwordClause""",
+                )
+                logger.info { "Role '$roleName' created (login=$login)" }
+            } else if (login && password != null) {
+                conn.createStatement().execute(
+                    """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD ${quoteLiteral(conn, password)} $loginClause""",
+                )
+                logger.info { "Role '$roleName' updated" }
+            } else {
+                conn.createStatement().execute(
+                    """ALTER ROLE "${roleName.validateIdentifier()}" WITH $loginClause""",
+                )
+                logger.info { "Role '$roleName' exists, updated attributes" }
+            }
+        }
+    }
+
+    fun grantDatabasePermissions(
+        connectionFactory: PostgresConnectionFactory,
+        roleName: String,
         dbName: String,
         permissions: List<Permission>,
     ) {
+        if (permissions.isEmpty()) return
+        val privs = permissions.joinToString(", ")
         connectionFactory.connect().use { conn ->
-            if (!roleExists(conn, roleName)) {
-                createRole(conn, roleName, rolePassword)
-            } else {
-                logger.info { "Role '$roleName' already exists, skipping creation" }
-            }
-        }
-
-        connectionFactory.connect(dbName).use { conn ->
-            grantPrivileges(conn, roleName, dbName, permissions)
-        }
-    }
-
-    fun updatePassword(
-        roleName: String,
-        newPassword: String,
-    ) {
-        try {
-            connectionFactory.connect().use { conn ->
-                val quotedPassword = quoteLiteral(conn, newPassword)
-                conn.createStatement().execute(
-                    """ALTER ROLE "${roleName.validateIdentifier()}" WITH PASSWORD $quotedPassword""",
-                )
-                logger.info { "Password updated for role '$roleName'" }
-            }
-        } catch (e: SQLException) {
-            throw ProvisioningException(
-                ProvisioningError.ROLE_PASSWORD_UPDATE_FAILED,
-                "Failed to update password for role '$roleName'",
-                e,
+            conn.createStatement().execute(
+                """GRANT $privs ON DATABASE "${dbName.validateIdentifier()}" TO "${roleName.validateIdentifier()}"""",
             )
         }
+        logger.info { "Granted $privs on database '$dbName' to role '$roleName'" }
     }
 
-    private fun roleExists(
+    fun grantRole(
+        connectionFactory: PostgresConnectionFactory,
+        parent: String,
+        child: String,
+    ) {
+        connectionFactory.connect().use { conn ->
+            conn.createStatement().execute(
+                """GRANT "${parent.validateIdentifier()}" TO "${child.validateIdentifier()}"""",
+            )
+        }
+        logger.info { "Granted role '$parent' to '$child'" }
+    }
+
+    fun roleExists(
         conn: Connection,
         roleName: String,
     ): Boolean =
-        conn.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?").use { stmt ->
-            stmt.setString(1, roleName)
-            stmt.executeQuery().next()
+        conn.prepareStatement("SELECT 1 FROM pg_roles WHERE rolname = ?").use {
+            it.setString(1, roleName)
+            it.executeQuery().next()
         }
-
-    private fun createRole(
-        conn: Connection,
-        roleName: String,
-        rolePassword: String,
-    ) {
-        try {
-            val quotedPassword = quoteLiteral(conn, rolePassword)
-            conn.createStatement().execute(
-                """CREATE ROLE "${roleName.validateIdentifier()}" WITH LOGIN PASSWORD $quotedPassword""",
-            )
-            logger.info { "Role '$roleName' created" }
-        } catch (e: SQLException) {
-            throw ProvisioningException(
-                ProvisioningError.ROLE_CREATE_FAILED,
-                "Failed to create role '$roleName'",
-                e,
-            )
-        }
-    }
-
-    private fun grantPrivileges(
-        conn: Connection,
-        roleName: String,
-        dbName: String,
-        permissions: List<Permission>,
-    ) {
-        val role = roleName.validateIdentifier()
-        val grants = mutableListOf<String>()
-
-        if (Permission.CONNECT in permissions) {
-            grants += """GRANT CONNECT ON DATABASE "${dbName.validateIdentifier()}" TO "$role""""
-        }
-
-        val schemaPrivileges =
-            permissions
-                .mapNotNull { it.toSchemaPrivilege() }
-                .joinToString(", ")
-
-        if (schemaPrivileges.isNotEmpty()) {
-            grants += """GRANT USAGE ON SCHEMA public TO "$role""""
-            grants += """GRANT $schemaPrivileges ON ALL TABLES IN SCHEMA public TO "$role""""
-            grants += """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT $schemaPrivileges ON TABLES TO "$role""""
-        }
-
-        if (permissions.any { it in listOf(Permission.SELECT, Permission.CREATE) }) {
-            grants += """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$role""""
-            grants += """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "$role""""
-        }
-
-        try {
-            grants.forEach { sql -> conn.createStatement().execute(sql) }
-            logger.info { "Privileges $permissions on '$dbName' granted to '$roleName'" }
-        } catch (e: SQLException) {
-            throw ProvisioningException(
-                ProvisioningError.ROLE_PRIVILEGES_GRANT_FAILED,
-                "Failed to grant privileges on '$dbName' to '$roleName'",
-                e,
-            )
-        }
-    }
 
     private fun quoteLiteral(
         conn: Connection,
         value: String,
     ): String =
-        conn.prepareStatement("SELECT quote_literal(?)").use { stmt ->
-            stmt.setString(1, value)
-            stmt.executeQuery().use { rs ->
+        conn.prepareStatement("SELECT quote_literal(?)").use {
+            it.setString(1, value)
+            it.executeQuery().use { rs ->
                 rs.next()
                 rs.getString(1)
             }
         }
-
-    private fun String.validateIdentifier(): String {
-        require(this.matches(Regex("^[a-zA-Z0-9_\\-]+$"))) {
-            "Invalid identifier: $this"
-        }
-        return this
-    }
 }
-
-private fun Permission.toSchemaPrivilege(): String? =
-    when (this) {
-        Permission.SELECT -> "SELECT"
-        Permission.INSERT -> "INSERT"
-        Permission.UPDATE -> "UPDATE"
-        Permission.DELETE -> "DELETE"
-        Permission.TRUNCATE -> "TRUNCATE"
-        Permission.REFERENCES -> "REFERENCES"
-        Permission.TRIGGER -> "TRIGGER"
-        Permission.CREATE -> "CREATE"
-        Permission.CONNECT -> null
-    }

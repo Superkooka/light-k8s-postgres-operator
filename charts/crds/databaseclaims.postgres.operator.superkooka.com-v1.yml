@@ -26,6 +26,39 @@ spec:
                   namespace:
                     type: "string"
                 type: "object"
+              roles:
+                items:
+                  properties:
+                    name:
+                      type: "string"
+                    schemas:
+                      additionalProperties:
+                        properties:
+                          permissions:
+                            items:
+                              enum:
+                              - "CONNECT"
+                              - "CREATE"
+                              - "DELETE"
+                              - "INSERT"
+                              - "REFERENCES"
+                              - "SELECT"
+                              - "TRIGGER"
+                              - "TRUNCATE"
+                              - "UPDATE"
+                              type: "string"
+                            type: "array"
+                        type: "object"
+                      type: "object"
+                  type: "object"
+                type: "array"
+              schemas:
+                items:
+                  properties:
+                    name:
+                      type: "string"
+                  type: "object"
+                type: "array"
               users:
                 items:
                   properties:
@@ -43,6 +76,10 @@ spec:
                         - "TRIGGER"
                         - "TRUNCATE"
                         - "UPDATE"
+                        type: "string"
+                      type: "array"
+                    roles:
+                      items:
                         type: "string"
                       type: "array"
                     secretName:
