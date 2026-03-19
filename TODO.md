@@ -3,11 +3,13 @@
 - [x] Github Action CI
 - [x] Renovate
 - [x] Architecture
+- [x] PostgresInstance CRD to centralize credentials
+- [ ] Helm Chart ready for prod + CI
 - [ ] Add unit/e2e tests
 - [ ] Add documentation
-- [ ] Split DatabaseClaim responsibility into PostgresRole/Claim CRD
 - [ ] Explicit reconciliation strategy
-- [ ] Add Customisation on role/claim
 - [ ] Release V1
+- [ ] Split DatabaseClaim responsibility into PostgresRole/Claim CRD
+- [ ] Add Customisation on role/claim
 - [ ] Internal Metrics
 - [ ] Backup
