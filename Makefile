@@ -96,7 +96,7 @@ deploy: syncCrds image _check-context
 	$(HELM) upgrade --install $(CHART_NAME) charts/ \
 		--namespace $(NAMESPACE) \
 		--values charts/values.yaml \
-		--values values.local.yaml \
+		--values ./values.local.yaml \
 		--wait --timeout 2m
 	@echo "Deploy OK"
 

@@ -18,7 +18,7 @@ operator:
   serviceAccount:
     name: my-operator
 
-postgres:
+postgresql:
   enabled: false
   auth:
     enablePostgresUser: true

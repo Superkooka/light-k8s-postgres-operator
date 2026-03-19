@@ -5,7 +5,7 @@ operator:
     pullPolicy: Never
   leaderElection: false
 
-postgres:
+postgresql:
   enabled: true
   storage:
     type: emptyDir

@@ -13,4 +13,4 @@ build
 .kotlin
 
 charts/charts/
-./values.local.yaml
+/values.local.yaml
