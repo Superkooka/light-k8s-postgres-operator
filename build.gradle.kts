@@ -18,7 +18,7 @@ plugins {
 }
 
 group = "com.superkooka"
-version = "early-dev"
+version = "1.0.0-alpha"
 
 java {
     toolchain {
@@ -133,34 +133,6 @@ tasks.register<Copy>("syncCrds") {
     dependsOn("generateCrds")
 }
 
-tasks.register("syncHelmVersion") {
-    group = "helm"
-
-    val chartDir = chartsDirectory
-    val appVersion = version.toString()
-
-    doLast {
-        val chartFile = File("$chartDir/Chart.yaml")
-        chartFile.writeText(
-            chartFile
-                .readText()
-                .replace(Regex("appVersion: .+# managed-by-gradle"), "appVersion: \"$appVersion\"  # managed-by-gradle"),
-        )
-        val valuesFile = File("$chartDir/values.yaml")
-        valuesFile.writeText(
-            valuesFile
-                .readText()
-                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$appVersion\"  # managed-by-gradle"),
-        )
-        val valuesLocalFile = File("$chartDir/values.local.yaml")
-        valuesLocalFile.writeText(
-            valuesLocalFile
-                .readText()
-                .replace(Regex("tag: .+# managed-by-gradle"), "tag: \"$appVersion\"  # managed-by-gradle"),
-        )
-    }
-}
-
 listOf("jibDockerBuild", "jibBuildTar", "jib").forEach { taskName ->
     getTasksByName(taskName, true).forEach { task ->
         task.notCompatibleWithConfigurationCache("Jib is not compatible with configuration cache")
@@ -187,5 +159,5 @@ jib {
 }
 
 tasks.named("jib") {
-    enabled = false
+    enabled = project.hasProperty("enableJib")
 }

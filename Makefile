@@ -29,7 +29,7 @@ init:
 	fi
 	
 .PHONY: run
-run: check-dependencies cluster-up build syncHelmVersion syncCrds deploy logs
+run: check-dependencies cluster-up build syncCrds deploy logs
 
 .PHONY: stop
 stop: cluster-down
@@ -45,12 +45,6 @@ test:
 .PHONY: image
 image:
 	./gradlew jibDockerBuild $(GRADLEW_EXTRA_ARGUMENTS)
-
-.PHONY: syncHelmVersion
-syncHelmVersion:
-	@echo "Syncing Helm chart version..."
-	./gradlew syncHelmVersion $(GRADLEW_EXTRA_ARGUMENTS)
-	@echo "Sync OK"
 
 .PHONY: syncCrds
 syncCrds:
