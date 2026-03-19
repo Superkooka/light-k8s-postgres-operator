@@ -38,6 +38,9 @@ jobs:
               --username ${{ github.actor }} \
               --password-stdin
 
+      - name: Add Helm repositories
+        run: helm repo add bitnami https://charts.bitnami.com/bitnami
+
       - name: Build Helm dependencies
         run: helm dependency build ${{ env.CHART_DIR }}
 
