@@ -3,15 +3,16 @@ kind: ClusterRole
 metadata:
   name: {{ .Values.operator.serviceAccount.name }}
 rules:
-  - apiGroups: ["superkooka.com"]
-    resources: ["databaseclaims", "databaseclaims/status"]
+  - apiGroups: ["postgres.operator.superkooka.com"]
+    resources:
+      - databaseclaims
+      - databaseclaims/status
+      - postgresinstances
+      - postgresinstances/status
     verbs: ["get", "list", "watch", "update", "patch"]
   - apiGroups: [""]
     resources: ["services", "secrets", "events"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["apiextensions.k8s.io"]
-    resources: ["customresourcedefinitions"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
