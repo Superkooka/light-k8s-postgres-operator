@@ -1,12 +1,28 @@
 apiVersion: postgres.operator.superkooka.com/v1beta1
-kind: DatabaseClaim
+kind: PostgresInstance
 metadata:
-  name: my-app-db
+  name: my-postgres-instance
   namespace: default
 spec:
-  postgresRef:
+  postgresServiceRef:
     name: postgres
   credentialsRef:
-    name: postgres-admin-credentials
-  database: my_app_db
-  owner: my_app_user
+    name: postgres-credentials
+---
+
+apiVersion: postgres.operator.superkooka.com/v1beta1
+kind: DatabaseClaim
+metadata:
+  name: my-app-database
+  namespace: default
+spec:
+  instanceRef:
+    name: my-postgres-instance
+  database: my-app-database
+  users:
+    - name: my-app-user
+      permissions: [CONNECT, CREATE, SELECT, INSERT, UPDATE, DELETE]
+      secretName: my-app-user-secret
+    - name: my-app-readonly
+      permissions: [CONNECT, SELECT]
+      secretName: my-app-readonly-secret

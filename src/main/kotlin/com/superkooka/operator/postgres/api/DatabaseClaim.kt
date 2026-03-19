@@ -13,21 +13,38 @@ class DatabaseClaim :
     Namespaced
 
 class DatabaseClaimSpec {
-    lateinit var postgresRef: ResourceRef
-    lateinit var credentialsRef: ResourceRef
+    lateinit var instanceRef: ResourceRef
     lateinit var database: String
-    lateinit var owner: String
+    var users: List<DatabaseUser> = emptyList()
 }
 
-class ResourceRef {
+class DatabaseUser {
     lateinit var name: String
-    var namespace: String? = null
+    lateinit var secretName: String
+    var permissions: List<Permission> = Permission.ALL
+}
+
+enum class Permission {
+    CONNECT,
+    SELECT,
+    INSERT,
+    UPDATE,
+    DELETE,
+    CREATE,
+    TRUNCATE,
+    REFERENCES,
+    TRIGGER,
+    ;
+
+    companion object {
+        val ALL = listOf(CONNECT, SELECT, INSERT, UPDATE, DELETE, CREATE, TRUNCATE, REFERENCES, TRIGGER)
+        val READONLY = listOf(CONNECT, SELECT)
+    }
 }
 
 class DatabaseClaimStatus {
     var phase: String = "Pending"
     var message: String = ""
-    var connectionSecret: String = ""
     var conditions: MutableList<Condition> = mutableListOf()
     var observedGeneration: Long? = null
 }
