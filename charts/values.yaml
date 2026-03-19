@@ -1,7 +1,7 @@
 operator:
   image:
     repository: ghcr.io/superkooka/light-k8s-postgres-operator
-    tag: "early-dev"  # managed-by-gradle
+    tag: "v1.0.0-alpha"
     pullPolicy: IfNotPresent
     pullSecrets: []
   # healthPort: 8080
