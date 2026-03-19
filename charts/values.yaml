@@ -1,7 +1,7 @@
 operator:
   image:
     repository: ghcr.io/superkooka/light-k8s-postgres-operator
-    tag: "v1.0.0-alpha"
+    tag: "v1.0.0-alpha.1"
     pullPolicy: IfNotPresent
     pullSecrets: []
   # healthPort: 8080
@@ -16,7 +16,7 @@ operator:
       memory: 256Mi
       cpu: 100m
   serviceAccount:
-    name: my-operator
+    name: light-k8s-postgres-operator
 
 postgresql:
   enabled: false
