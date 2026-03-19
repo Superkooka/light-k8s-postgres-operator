@@ -24,9 +24,10 @@ jobs:
         id: meta
         run: |
           VERSION=${GITHUB_REF_NAME#chart/v}
+          OWNER="${{ github.repository_owner }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=chart/v$VERSION" >> $GITHUB_OUTPUT
-          echo "oci_repo=oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts" >> $GITHUB_OUTPUT
+          echo "oci_repo=oci://${{ env.REGISTRY }}/${OWNER,,}/charts" >> $GITHUB_OUTPUT
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
