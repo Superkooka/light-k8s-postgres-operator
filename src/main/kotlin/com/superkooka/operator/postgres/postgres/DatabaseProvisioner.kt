@@ -20,9 +20,9 @@ class DatabaseProvisioner {
                     conn.createStatement().use { stmt ->
                         stmt.execute("""CREATE DATABASE "$dbName"""")
                     }
-                    logger.info { "Database '$dbName' created" }
+                    logger.info { "Database '$dbName' created on ${connectionFactory.credentials.host}" }
                 } else {
-                    logger.info { "Database '$dbName' already exists, skipping" }
+                    logger.info { "Database '$dbName' already exists, skipping creation" }
                 }
             }
         } catch (e: SQLException) {

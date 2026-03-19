@@ -64,20 +64,6 @@ spec:
                   properties:
                     name:
                       type: "string"
-                    permissions:
-                      items:
-                        enum:
-                        - "CONNECT"
-                        - "CREATE"
-                        - "DELETE"
-                        - "INSERT"
-                        - "REFERENCES"
-                        - "SELECT"
-                        - "TRIGGER"
-                        - "TRUNCATE"
-                        - "UPDATE"
-                        type: "string"
-                      type: "array"
                     roles:
                       items:
                         type: "string"

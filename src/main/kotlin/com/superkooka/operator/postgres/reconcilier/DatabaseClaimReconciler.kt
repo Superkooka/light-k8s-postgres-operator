@@ -82,7 +82,7 @@ class DatabaseClaimReconciler(
                 connectionFactory,
                 ownerRole,
                 spec.database,
-                listOf(Permission.CONNECT, Permission.CREATE),
+                Permission.DATABASE_ALL,
             )
 
             spec.schemas.forEach { schema ->
@@ -92,6 +92,25 @@ class DatabaseClaimReconciler(
 
             spec.roles.forEach { roleSpec ->
                 roleProvisioner.ensureRole(connectionFactory, roleSpec.name, login = false)
+
+                spec.schemas.forEach { schema ->
+                    schemaProvisioner.revokeSchemaPrivileges(
+                        connectionFactory,
+                        spec.database,
+                        schema.name,
+                        roleSpec.name,
+                        Permission.ALL,
+                    )
+                    schemaProvisioner.revokeDefaultPrivileges(
+                        connectionFactory,
+                        spec.database,
+                        schema.name,
+                        ownerRole,
+                        roleSpec.name,
+                        Permission.ALL,
+                    )
+                }
+
                 roleSpec.schemas.forEach { (schemaName, schemaPerms) ->
                     schemaProvisioner.grantSchemaPrivileges(
                         connectionFactory,
@@ -116,6 +135,18 @@ class DatabaseClaimReconciler(
                 val password =
                     userPasswords[userSpec.name] ?: throw IllegalArgumentException("Missing password for user '${userSpec.name}'")
                 roleProvisioner.ensureRole(connectionFactory, userSpec.name, login = true, password = password)
+
+                roleProvisioner.revokeDatabasePermissions(
+                    connectionFactory,
+                    userSpec.name,
+                    spec.database,
+                    Permission.DATABASE_ALL,
+                )
+
+                spec.roles.forEach { roleSpec ->
+                    roleProvisioner.revokeRole(connectionFactory, roleSpec.name, userSpec.name)
+                }
+
                 roleProvisioner.grantDatabasePermissions(
                     connectionFactory,
                     userSpec.name,

@@ -15,6 +15,7 @@ enum class Permission {
     companion object {
         val ALL = listOf(CONNECT, SELECT, INSERT, UPDATE, DELETE, CREATE, TRUNCATE, REFERENCES, TRIGGER)
         val READONLY = listOf(CONNECT, SELECT)
+        val DATABASE_ALL = listOf(CONNECT, CREATE)
     }
 
     fun toTablePrivilege(): String? =

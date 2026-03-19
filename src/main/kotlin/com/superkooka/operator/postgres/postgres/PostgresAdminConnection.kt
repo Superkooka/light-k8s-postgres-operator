@@ -25,3 +25,18 @@ fun String.validateIdentifier(): String {
     require(this.matches(Regex("^[a-zA-Z0-9_\\-]+$"))) { "Invalid identifier: $this" }
     return this
 }
+
+fun <T> Connection.transaction(block: (Connection) -> T): T {
+    val initialAutoCommit = this.autoCommit
+    this.autoCommit = false
+    return try {
+        val result = block(this)
+        this.commit()
+        result
+    } catch (e: Exception) {
+        this.rollback()
+        throw e
+    } finally {
+        this.autoCommit = initialAutoCommit
+    }
+}
