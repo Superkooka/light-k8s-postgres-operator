@@ -25,11 +25,11 @@ spec:
     - name: my-app-rw
       schemas:
         app:
-          permissions: [SELECT, INSERT, UPDATE, DELETE]
+          permissions: [CONNECT, CREATE, SELECT, INSERT, UPDATE, DELETE]
     - name: my-app-ro
       schemas:
         app:
-          permissions: [SELECT]
+          permissions: [CONNECT, SELECT]
   users:
     - name: my-app-user
       roles: [my-app-rw]
