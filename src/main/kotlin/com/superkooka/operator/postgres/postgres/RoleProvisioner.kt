@@ -1,5 +1,6 @@
 package com.superkooka.operator.postgres.postgres
 
+import com.superkooka.operator.postgres.api.Permission
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.sql.Connection
 import java.sql.SQLException
@@ -13,6 +14,7 @@ class RoleProvisioner(
         roleName: String,
         rolePassword: String,
         dbName: String,
+        permissions: List<Permission>,
     ) {
         connectionFactory.connect().use { conn ->
             if (!roleExists(conn, roleName)) {
@@ -23,7 +25,7 @@ class RoleProvisioner(
         }
 
         connectionFactory.connect(dbName).use { conn ->
-            grantPrivileges(conn, roleName, dbName)
+            grantPrivileges(conn, roleName, dbName, permissions)
         }
     }
 
@@ -81,19 +83,34 @@ class RoleProvisioner(
         conn: Connection,
         roleName: String,
         dbName: String,
+        permissions: List<Permission>,
     ) {
-        val grants =
-            listOf(
-                """GRANT USAGE ON SCHEMA public TO "${roleName.validateIdentifier()}"""",
-                """GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${roleName.validateIdentifier()}"""",
-                """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${roleName.validateIdentifier()}"""",
-                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${roleName.validateIdentifier()}"""",
-                """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "${roleName.validateIdentifier()}"""",
-            )
+        val role = roleName.validateIdentifier()
+        val grants = mutableListOf<String>()
+
+        if (Permission.CONNECT in permissions) {
+            grants += """GRANT CONNECT ON DATABASE "${dbName.validateIdentifier()}" TO "$role""""
+        }
+
+        val schemaPrivileges =
+            permissions
+                .mapNotNull { it.toSchemaPrivilege() }
+                .joinToString(", ")
+
+        if (schemaPrivileges.isNotEmpty()) {
+            grants += """GRANT USAGE ON SCHEMA public TO "$role""""
+            grants += """GRANT $schemaPrivileges ON ALL TABLES IN SCHEMA public TO "$role""""
+            grants += """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT $schemaPrivileges ON TABLES TO "$role""""
+        }
+
+        if (permissions.any { it in listOf(Permission.SELECT, Permission.CREATE) }) {
+            grants += """GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$role""""
+            grants += """ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "$role""""
+        }
 
         try {
             grants.forEach { sql -> conn.createStatement().execute(sql) }
-            logger.info { "Privileges on '$dbName' granted to '$roleName'" }
+            logger.info { "Privileges $permissions on '$dbName' granted to '$roleName'" }
         } catch (e: SQLException) {
             throw ProvisioningException(
                 ProvisioningError.ROLE_PRIVILEGES_GRANT_FAILED,
@@ -122,3 +139,16 @@ class RoleProvisioner(
         return this
     }
 }
+
+private fun Permission.toSchemaPrivilege(): String? =
+    when (this) {
+        Permission.SELECT -> "SELECT"
+        Permission.INSERT -> "INSERT"
+        Permission.UPDATE -> "UPDATE"
+        Permission.DELETE -> "DELETE"
+        Permission.TRUNCATE -> "TRUNCATE"
+        Permission.REFERENCES -> "REFERENCES"
+        Permission.TRIGGER -> "TRIGGER"
+        Permission.CREATE -> "CREATE"
+        Permission.CONNECT -> null
+    }
