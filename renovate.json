@@ -6,17 +6,18 @@
   "labels": ["dependencies"],
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate Dashboard",
+  "allowedUnsafeExecutions": ["gradleWrapper"],
 
-    "regexManagers": [
-      {
-        "fileMatch": [".*\\.gradle\\.kts"],
-        "matchStrings": [
-          "image\\s*=\\s*\"(?<depName>[^:@]+:[^@]+)@(?<currentValue>sha256:[a-f0-9]+)\""
-        ],
-        "datasourceTemplate": "docker",
-        "versioningTemplate": "docker"
-      }
-    ],
+  "regexManagers": [
+    {
+      "fileMatch": [".*\\.gradle\\.kts"],
+      "matchStrings": [
+        "image\\s*=\\s*\"(?<depName>[^:@]+:[^@]+)@(?<currentValue>sha256:[a-f0-9]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
 
   "packageRules": [
     {
