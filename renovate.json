@@ -6,7 +6,6 @@
   "labels": ["dependencies"],
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate Dashboard",
-  "allowedUnsafeExecutions": ["gradleWrapper"],
 
   "regexManagers": [
     {
