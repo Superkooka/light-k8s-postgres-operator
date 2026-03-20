@@ -47,6 +47,11 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["eclipse-temurin"],
       "groupName": "JRE Base Image"
+    },
+    {
+      "matchPackageNames": ["softprops/action-gh-release"],
+      "matchManagers": ["github-actions"],
+      "pinDigests": false
     }
   ]
 }
