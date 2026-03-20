@@ -5,6 +5,11 @@ on:
     - cron: "0 4 * * 1" # Every Monday at 4:00 AM UTC
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 jobs:
   renovate:
     name: Renovate
