@@ -141,7 +141,7 @@ listOf("jibDockerBuild", "jibBuildTar", "jib").forEach { taskName ->
 
 jib {
     from {
-        image = "eclipse-temurin:21-jre-alpine"
+        image = "eclipse-temurin:21-jre-alpine@sha256:6ad8ed080d9be96b61438ec3ce99388e294af216ed57356000c06070e85c5d5d"
     }
     to {
         image = "light-k8s-postgres-operator"
