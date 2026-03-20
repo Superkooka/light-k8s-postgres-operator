@@ -7,12 +7,11 @@
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate Dashboard",
 
-  "regexManagers": [
+  "customManagers": [
     {
-      "fileMatch": [".*\\.gradle\\.kts"],
-      "matchStrings": [
-        "image\\s*=\\s*\"(?<depName>[^:@]+:[^@]+)@(?<currentValue>sha256:[a-f0-9]+)\""
-      ],
+      "customType": "regex",
+      "managerFilePatterns": ["/.*\.gradle\.kts/"],
+      "matchStrings": ["image\s*=\s*\"(?<depName>[^:@]+:[^@]+)@(?<currentValue>sha256:[a-f0-9]+)\""],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     }
@@ -24,16 +23,22 @@
       "labels": ["dependencies", "major-update"]
     },
     {
-      "matchPackagePrefixes": ["org.jetbrains.kotlin"],
-      "groupName": "Kotlin"
+      "groupName": "Kotlin",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin{/,}**"
+      ]
     },
     {
-      "matchPackagePrefixes": ["io.javaoperatorsdk"],
-      "groupName": "Java Operator SDK"
+      "groupName": "Java Operator SDK",
+      "matchPackageNames": [
+        "io.javaoperatorsdk{/,}**"
+      ]
     },
     {
-      "matchPackagePrefixes": ["io.fabric8"],
-      "groupName": "Fabric8"
+      "groupName": "Fabric8",
+      "matchPackageNames": [
+        "io.fabric8{/,}**"
+      ]
     },
     {
       "matchManagers": ["github-actions"],
