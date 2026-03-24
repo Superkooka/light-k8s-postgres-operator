@@ -12,6 +12,7 @@ slf4j = "2.0.13"
 logback = "1.5.6"
 fabric8-crd = "7.6.1"
 awaitility = "4.3.0"
+ktor = "3.4.1"
 
 [libraries]
 josdk-bom = { module = "io.javaoperatorsdk:operator-framework-bom", version.ref = "josdk" }
@@ -26,6 +27,8 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 awaitility-kotlin = { module = "org.awaitility:awaitility-kotlin", version.ref = "awaitility" }
+ktor-server-core = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
+ktor-server-netty = { module = "io.ktor:ktor-server-netty-jvm", version.ref = "ktor" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

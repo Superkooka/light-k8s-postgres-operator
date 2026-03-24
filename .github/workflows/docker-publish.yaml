@@ -50,7 +50,8 @@ jobs:
         run: |
           ./gradlew jib -PenableJib \
             -Djib.to.image=${{ steps.meta.outputs.image }} \
-            -Djib.to.tags="${{ steps.meta.outputs.version }},latest"
+            -Djib.to.tags="${{ steps.meta.outputs.version }},latest" \
+            -Pversion=${{ steps.meta.outputs.version }}
 
       - name: Image digest
         run: |
