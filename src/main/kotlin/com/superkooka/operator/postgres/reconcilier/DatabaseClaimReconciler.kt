@@ -65,7 +65,7 @@ class DatabaseClaimReconciler(
                         .get()
                 val userPassword =
                     userSecret?.let { String(Base64.getDecoder().decode(it.data["password"])) }
-                        ?: Base64.getEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
+                        ?: Base64.getUrlEncoder().withoutPadding().encodeToString(SecureRandom().generateSeed(32))
                 user.name to userPassword
             }
 
