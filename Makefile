@@ -1,4 +1,4 @@
-VERSION   := $(shell grep '^version' build.gradle.kts | head -1 | sed 's/.*"\(.*\)"/\1/')
+VERSION := $(shell grep '^version=' gradle.properties | head -1 | sed 's/version=//')
 IMAGE     := light-k8s-postgres-operator
 CLUSTER   := light-k8s-postgres-operator-dev
 CONTEXT   := k3d-$(CLUSTER)

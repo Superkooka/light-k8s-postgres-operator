@@ -1,10 +1,10 @@
 operator:
   image:
     repository: ghcr.io/superkooka/light-k8s-postgres-operator
-    tag: "v1.0.0-alpha.1"
+    tag: "v1.0.0-alpha.2"
     pullPolicy: IfNotPresent
     pullSecrets: []
-  # healthPort: 8080
+  healthPort: 8080
   # metricsPort: 8081
   # leaderElection: false
   namespace: default

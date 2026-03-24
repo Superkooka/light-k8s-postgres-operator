@@ -18,7 +18,6 @@ plugins {
 }
 
 group = "com.superkooka"
-version = "1.0.0-alpha.1"
 
 java {
     toolchain {
@@ -41,6 +40,10 @@ dependencies {
     implementation(libs.kotlin.logging)
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
+
+    // Ktor
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.netty)
 
     // Test
     testImplementation(libs.josdk.junit5)
