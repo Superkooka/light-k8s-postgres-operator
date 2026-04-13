@@ -3,7 +3,7 @@
 
 [versions]
 kotlin = "2.3.20"
-josdk = "5.2.3"
+josdk = "5.3.3"
 jib = "3.5.3"
 ktlint-plugin = "14.2.0"
 postgresql = "42.7.10"
